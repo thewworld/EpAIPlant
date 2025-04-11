@@ -18,10 +18,12 @@ export function AppDetail({ appConfig, className }: AppDetailProps) {
         switch (appConfig.type) {
           case AppType.CHAT:
             return <ChatAppDetail appConfig={appConfig} className="h-full" />
-          case AppType.FORM_CHAT:
-            return <FormChatAppDetail appConfig={appConfig} className="h-full" />
+          case AppType.WORKFLOW:
+            return <ChatAppDetail appConfig={appConfig} className="h-full" />
+          case AppType.COMPLETION:
+            return <ChatAppDetail appConfig={appConfig} className="h-full" />
           default:
-            return <div>不支持的应用类型</div>
+            return <div>不支持的应用类型: {appConfig.type}</div>
         }
       })()}
     </div>

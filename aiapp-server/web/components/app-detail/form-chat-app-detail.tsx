@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react"
 import type { AppConfig } from "@/types/app-config"
-import { FieldType } from "@/types/app-config"
+import { FieldType, AppType } from "@/types/app-config"
 import { Message } from "@/components/chat/message"
 import { CombinedIntro } from "@/components/chat/combined-intro"
 import { DynamicForm } from "@/components/app-detail/dynamic-form"
@@ -10,6 +10,7 @@ import { useToast } from "@/components/ui/use-toast"
 import { Paperclip } from "lucide-react"
 import { getAppIconById, svgToDataUrl } from "@/lib/app-icons"
 import { SimpleChatInput } from "@/components/chat/simple-chat-input"
+import { callDifyApi, type DifyApiParams, type DifyApiResponse } from "@/lib/dify-api"
 
 // 添加上传文件类型定义
 interface UploadedFile {
@@ -38,6 +39,22 @@ interface ChatMessage {
   isStreaming?: boolean // 添加流式状态标记
 }
 
+// 添加API请求参数接口
+interface ApiRequestParams {
+  query: string
+  inputs?: Record<string, any>
+  files?: Array<{
+    type: string
+    transfer_method: string
+    url: string
+    upload_file_id: string
+  }>
+  user?: string
+  conversation_id?: string
+  response_mode?: string
+  auto_generate_name?: boolean
+}
+
 export function FormChatAppDetail({ appConfig, className }: FormChatAppDetailProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [isLoading, setIsLoading] = useState(false)
@@ -62,389 +79,266 @@ export function FormChatAppDetail({ appConfig, className }: FormChatAppDetailPro
 
   // 处理发送消息 (聊天输入框)
   const handleSendMessage = async (content: string) => {
-    // 如果文本和文件都为空，则不发送
     if (!content.trim() && chatUploadedFiles.filter(f => !f.error && f.uploadFileId).length === 0) {
-        console.log("FormChatAppDetail (handleSendMessage): Aborting send, empty content and no valid files.");
-        return;
+      console.log("发送消息: 内容为空且没有有效文件，终止发送")
+      return
     }
 
-    // 添加用户消息 (暂时不显示聊天上传的文件在用户消息气泡中，但可以稍后添加)
+    // 处理聊天输入框上传的文件
+    const chatFilesToSend = chatUploadedFiles
+      .filter(f => f.uploadFileId && !f.error)
+      .map(f => ({
+        type: f.type.startsWith("image/") ? "image" : "document",
+        transfer_method: "local_file",
+        url: "",
+        upload_file_id: f.uploadFileId!,
+      }))
+
     const userMessage: ChatMessage = {
-      id: Date.now().toString(),
+      id: `user-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
       role: "user",
       content,
       timestamp: new Date(),
-      // files: chatUploadedFiles.filter(f => !f.error && f.uploadFileId), // 可选：在UI上显示文件
     }
-    setMessages((prev) => [...prev, userMessage])
+
+    setMessages(prev => [...prev, userMessage])
     setIsLoading(true)
 
-    // 准备从聊天输入框上传的文件列表，用于 API 请求
-    const chatFilesToSend = chatUploadedFiles
-      .filter(f => f.uploadFileId && !f.error) // 只包含成功上传且有 ID 的文件
-      .map(f => ({
-        type: f.type.startsWith("image/") ? "image" : "document", // 根据 MIME 类型判断
-        transfer_method: "local_file",
-        upload_file_id: f.uploadFileId!, // 使用 ! 断言，因为我们已经过滤了
-      }));
+    // 立即添加一个正在思考的助手消息
+    const thinkingMessageId = `thinking-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
+    const thinkingMessage: ChatMessage = {
+      id: thinkingMessageId,
+      content: '正在思考...',
+      role: 'assistant',
+      timestamp: new Date(),
+      isStreaming: true
+    }
+    setMessages(prev => [...prev, thinkingMessage])
 
     try {
-      // 构建调用 chat-messages 的请求体
-      const requestBody = {
-        query: content, // 使用聊天输入框的内容作为查询
+      // 构建完整的请求参数，包含表单参数和聊天输入框参数
+      const apiParams: DifyApiParams = {
+        query: content,
         user: "test_user",
-        conversation_id: "", // 如果需要管理会话，请传入会话 ID
-        inputs: submittedInputs || {}, // <<< 仍然使用存储的表单 inputs >>>
-        files: chatFilesToSend, // <<< 使用聊天输入框上传的文件 >>>
+        conversation_id: "",
+        inputs: submittedInputs || {}, // 使用已提交的表单参数
+        files: chatFilesToSend, // 聊天输入框上传的文件
         response_mode: appConfig.chatModel === "sse" ? "streaming" : "blocking",
-        auto_generate_name: true, // 根据需要设置
-      };
-
-      const apiEndpoint = `http://localhost:8087/api/dify/chat-messages?appId=${appConfig.id}`;
-
-      console.log("FormChatAppDetail (handleSendMessage): Calling Chat API Endpoint:", apiEndpoint);
-      console.log("FormChatAppDetail (handleSendMessage): Request Body with chat files:", JSON.stringify(requestBody, null, 2)); // <<< 更新日志消息 >>>
-      console.log(`FormChatAppDetail (handleSendMessage): Checking chatModel for API call: '${appConfig.chatModel}'`);
-
-      // --- 使用与之前类似的 Fetch 逻辑 (SSE 或 Blocking) ---
-       if (appConfig.chatModel === "sse") {
-          console.log("FormChatAppDetail (handleSendMessage): Using SSE fetch logic.");
-          // --- Start: SSE Implementation (类似 ChatAppDetail 或 handleFormSubmit 中的) ---
-          const response = await fetch(apiEndpoint, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "Accept": "text/event-stream" },
-            body: JSON.stringify(requestBody),
-          });
-          if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`聊天SSE请求失败: ${response.status} ${errorText}`);
-          }
-          const reader = response.body?.getReader();
-          if (!reader) throw new Error("无法读取聊天响应流");
-          let assistantMessageContent = "";
-          const decoder = new TextDecoder();
-          let buffer = "";
-          const initialAssistantMessageId = `msg-${Date.now()}`;
-          // 添加空的流式消息占位符
-          setMessages((prev) => [
-            ...prev,
-            {
-              id: initialAssistantMessageId,
-              content: "",
-              role: "assistant",
-              timestamp: new Date(),
-              isStreaming: true,
-            },
-          ]);
-          try {
-            while (true) {
-              const { done, value } = await reader.read();
-              if (done) break;
-              const chunk = decoder.decode(value);
-              buffer += chunk;
-              let lines = buffer.split("\n");
-              buffer = lines.pop() || "";
-              for (const line of lines) {
-                 if (line.trim() === "" || !line.startsWith("data:")) continue;
-                 try {
-                    const jsonStr = line.substring(5).trim();
-                    if (!jsonStr) continue;
-                    const data = JSON.parse(jsonStr);
-                    // 根据 Dify chat-messages SSE 格式解析 answer
-                    if ((data.event === "message" || data.event === "agent_message") && data.answer) {
-                       assistantMessageContent += data.answer;
-                       // 更新流式消息内容
-                       setMessages((prev) => prev.map(msg =>
-                          msg.id === initialAssistantMessageId ? { ...msg, content: assistantMessageContent } : msg
-                       ));
-                    } else if (data.event === "message_end") {
-                       // 标记消息流式结束
-                       setMessages((prev) => prev.map(msg =>
-                          msg.id === initialAssistantMessageId ? { ...msg, isStreaming: false } : msg
-                       ));
-                       // console.log("SSE message end received.");
-                    }
-                 } catch (e) {
-                    console.error("解析聊天SSE数据失败:", e, "原始数据:", line);
-                 }
-              }
-            }
-          } finally {
-             // 确保最终标记流式结束
-             setMessages((prev) => prev.map(msg =>
-                msg.id === initialAssistantMessageId ? { ...msg, isStreaming: false } : msg
-             ));
-             reader.releaseLock();
-          }
-          // --- End: SSE Implementation ---
-       } else {
-          console.log("FormChatAppDetail (handleSendMessage): Using Blocking fetch logic.");
-          // --- Start: Blocking Implementation ---
-          const response = await fetch(apiEndpoint, {
-             method: "POST",
-             headers: { "Content-Type": "application/json" },
-             body: JSON.stringify(requestBody),
-          });
-           if (!response.ok) {
-             const errorText = await response.text();
-             throw new Error(`聊天请求失败: ${response.status} ${errorText}`);
-           }
-           const data = await response.json();
-           console.log("FormChatAppDetail (handleSendMessage): Blocking response data:", data);
-      const assistantMessage: ChatMessage = {
-              id: data.message_id || `msg-${Date.now()}`,
-              content: data.answer || "处理完成。", // 根据 Dify chat-messages 响应格式获取内容
-        role: "assistant",
-        timestamp: new Date(),
-              isStreaming: false,
-            };
-            setMessages((prev) => [...prev, assistantMessage]);
-          // --- End: Blocking Implementation ---
+        auto_generate_name: true,
       }
-      // --- End Fetch Logic ---
 
-       // <<< 考虑在这里或 finally 中清空聊天文件状态 >>>
-       // setChatUploadedFiles([]); // 可以在成功后清除
+      const response = await callDifyApi(
+        apiParams,
+        {
+          appId: appConfig.id,
+          appType: appConfig.type,
+          chatModel: appConfig.chatModel || "block",
+        },
+        // 流式数据处理
+        (content) => {
+          setMessages(prev => prev.map(msg =>
+            msg.id === thinkingMessageId
+              ? { ...msg, content, isStreaming: true }
+              : msg
+          ))
+          // 当开始收到流式数据时，关闭加载状态
+          if (content) {
+            setIsLoading(false)
+          }
+        },
+        // 流式结束处理
+        () => {
+          setMessages(prev => prev.map(msg =>
+            msg.id === thinkingMessageId
+              ? { ...msg, isStreaming: false }
+              : msg
+          ))
+        }
+      )
 
+      if (response) {
+        // 如果是阻塞式响应，更新消息内容
+        setMessages(prev => prev.map(msg =>
+          msg.id === thinkingMessageId
+            ? { ...msg, content: response.content, isStreaming: false }
+            : msg
+        ))
+        setIsLoading(false)
+      }
     } catch (error) {
-      console.error("FormChatAppDetail (handleSendMessage): 调用聊天 API 失败:", error);
-      const errorMessage = error instanceof Error ? error.message : "处理聊天消息时出错";
+      console.error("发送消息失败:", error)
+      const errorMessage = error instanceof Error ? error.message : "处理消息时出错"
+      // 移除正在思考的消息
+      setMessages(prev => prev.filter(msg => msg.id !== thinkingMessageId))
        const errorChatMessage: ChatMessage = {
-          id: `err-${Date.now()}`,
+        id: `err-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
           role: "assistant",
           content: `错误: ${errorMessage}`,
           timestamp: new Date(),
           isStreaming: false,
        }
-       setMessages((prev) => [...prev, errorChatMessage]);
-       toast({ title: "错误", description: errorMessage, variant: "destructive" });
+      setMessages(prev => [...prev, errorChatMessage])
+      toast({
+        title: "错误",
+        description: errorMessage,
+        variant: "destructive",
+      })
     } finally {
-      setIsLoading(false);
-      // <<< 在 finally 块中清空聊天文件状态，确保无论成功失败都清除 >>>
-      console.log("FormChatAppDetail (handleSendMessage): Clearing chat uploaded files.");
-      setChatUploadedFiles([]);
+      setIsLoading(false)
+      setChatUploadedFiles([])
     }
   }
 
   // 处理表单提交
   const handleFormSubmit = async (formData: Record<string, any>) => {
-    console.log("FormChatAppDetail: Explicit form submit triggered.");
-    setIsFormSubmitting(true);
-    setIsLoading(true);
+    console.log("表单提交触发")
+    setIsFormSubmitting(true)
+    setIsLoading(true)
 
-    const userContentParts: string[] = ["提交表单:"];
-    const currentFormInputs: Record<string, any> = {};
-    const currentFormFiles: any[] = []; // Files *currently* associated with the form state
+    const userContentParts: string[] = ["提交表单:"]
+    const currentFormInputs: Record<string, any> = {}
+    let thinkingMessageId: string | undefined
 
     try {
        for (const fieldId in formData) {
-            const fieldConfig = appConfig.formConfig?.fields.find((f) => f.id === fieldId);
-            const value = formData[fieldId];
+        const fieldConfig = appConfig.formConfig?.fields.find((f) => f.id === fieldId)
+        const value = formData[fieldId]
 
           if (fieldConfig?.type === FieldType.FILE && Array.isArray(value)) {
-            const uploadedFilesArray = value as UploadedFile[];
-                // Filter for *valid* files associated with this field *at the time of submit*
-            const successfulUploads = uploadedFilesArray.filter(f => f.uploadFileId && !f.error);
+          const uploadedFilesArray = value as UploadedFile[]
+          const successfulUploads = uploadedFilesArray.filter(f => f.uploadFileId && !f.error)
 
             if (successfulUploads.length > 0) {
-                userContentParts.push(`${fieldConfig?.label || fieldId}: ${successfulUploads.map(f => f.name).join(', ')}`);
+            userContentParts.push(`${fieldConfig?.label || fieldId}: ${successfulUploads.map(f => f.name).join(', ')}`)
                 
-                    // --- Rebuild input/file info based on current form state ---
-                     // Example for ChatPaper (paper1) - adapt if needed
+            // 处理表单文件字段，添加到 inputs 中
                     if (fieldId === "paper1" && successfulUploads[0]) {
                          currentFormInputs[fieldId] = {
                             type: "document",
                     transfer_method: "local_file",
                             url: "",
                             upload_file_id: successfulUploads[0].uploadFileId
-                };
-                    } else {
-                        // Handle other file fields generically if necessary
-                        currentFormInputs[fieldId] = successfulUploads.map(f => f.uploadFileId); // Or store differently?
-                    }
-
-                successfulUploads.forEach(file => {
-                        currentFormFiles.push({
-                            type: file.type.startsWith("image/") ? "image" : "document",
-                    transfer_method: "local_file",
-                    url: "",
-                    upload_file_id: file.uploadFileId,
-                  });
-                    });
-                    // --- End rebuild ---
+              }
             } else {
-                userContentParts.push(`${fieldConfig?.label || fieldId}: (无有效上传文件)`);
+              // 其他文件字段也按照相同格式处理
+              currentFormInputs[fieldId] = {
+                type: "document",
+                transfer_method: "local_file",
+                url: "",
+                upload_file_id: successfulUploads[0].uploadFileId
+              }
             }
           } else {
-                userContentParts.push(`${fieldConfig?.label || fieldId}: ${value}`);
-                currentFormInputs[fieldId] = value;
+            userContentParts.push(`${fieldConfig?.label || fieldId}: (无有效上传文件)`)
           }
+        } else {
+          userContentParts.push(`${fieldConfig?.label || fieldId}: ${value}`)
+          currentFormInputs[fieldId] = value
         }
-    } catch (processingError) {
-        console.error("FormChatAppDetail: Error processing formData:", processingError); // <<< Log 5: Processing error
-        toast({ title: "错误", description: "处理表单数据时出错", variant: "destructive" });
-        setIsFormSubmitting(false);
-        setIsLoading(false);
-        return; // Stop execution if processing fails
-    }
-    
-    const userMessageContent = userContentParts.join("\n")
+      }
 
-    // 添加用户提交的消息
+      // 保存表单参数，供后续聊天使用
+      setSubmittedInputs(currentFormInputs)
+
     const userMessage: ChatMessage = {
-      id: Date.now().toString(),
+        id: `user-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
       role: "user",
-      content: userMessageContent,
+        content: userContentParts.join("\n"),
       timestamp: new Date(),
     }
-    setMessages((prev) => [...prev, userMessage])
 
-    // <<< Overwrite submitted state with the *current complete* form snapshot >>>
-    console.log("FormChatAppDetail: Setting submitted context from explicit submit.");
-    setSubmittedInputs(currentFormInputs);
-    setSubmittedFiles(currentFormFiles);
+      setMessages(prev => [...prev, userMessage])
 
-    try {
-      // <<< 调用后端对话 API >>>
-      const requestBody = {
-        query: "", // Explicit form submit might have no query, or use a default one?
+      // 立即添加一个正在思考的助手消息
+      thinkingMessageId = `thinking-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
+      const thinkingMessage: ChatMessage = {
+        id: thinkingMessageId,
+        content: '正在思考...',
+        role: 'assistant',
+        timestamp: new Date(),
+        isStreaming: true
+      }
+      setMessages(prev => [...prev, thinkingMessage])
+
+      // 构建完整的请求参数，包含表单参数和聊天输入框参数
+      const apiParams: DifyApiParams = {
+        query: "",
         user: "test_user",
-        conversation_id: "", // Manage conversation ID if needed
-        inputs: currentFormInputs,
-        files: currentFormFiles,
-        response_mode: appConfig.chatModel === "sse" ? "streaming" : "blocking", // Use app's chatModel
+        conversation_id: "",
+        inputs: currentFormInputs, // 表单参数
+        files: chatUploadedFiles.filter(f => f.uploadFileId && !f.error).map(f => ({
+          type: f.type.startsWith("image/") ? "image" : "document",
+          transfer_method: "local_file",
+          url: "",
+          upload_file_id: f.uploadFileId!,
+        })), // 聊天输入框上传的文件
+        response_mode: appConfig.chatModel === "sse" ? "streaming" : "blocking",
         auto_generate_name: true,
       }
       
-      const apiEndpoint = `http://localhost:8087/api/dify/chat-messages?appId=${appConfig.id}`
-      
-      // <<< Log 6: Before API call >>>
-      console.log("FormChatAppDetail: Calling Chat API Endpoint (from form submit):", apiEndpoint);
-      console.log("FormChatAppDetail: Request Body (from form submit):", JSON.stringify(requestBody, null, 2));
-      console.log(`FormChatAppDetail: Checking chatModel for API call (from form submit): '${appConfig.chatModel}'`);
-
-      // --- Add Fetch Logic similar to ChatAppDetail (SSE or Blocking) --- 
-       if (appConfig.chatModel === "sse") {
-          // <<< Log 8a: Entering SSE Branch >>>
-          console.log("FormChatAppDetail: Using SSE fetch logic.");
-          // --- Start: Actual SSE Implementation --- 
-          const response = await fetch(apiEndpoint, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(requestBody),
-          })
-          if (!response.ok) {
-            const errorText = await response.text()
-            throw new Error(`表单对话SSE请求失败: ${response.status} ${errorText}`)
-          }
-          const reader = response.body?.getReader()
-          if (!reader) throw new Error("无法读取表单对话响应流")
-          let assistantMessage = ""
-          const decoder = new TextDecoder()
-          let buffer = ""
-          const initialAssistantMessageId = `msg-${Date.now()}`
-          setMessages((prev) => [
-            ...prev,
-            {
-              id: initialAssistantMessageId,
-              content: "",
-              role: "assistant",
-              timestamp: new Date(),
-              isStreaming: true,
-            },
-          ])
-          try {
-            while (true) {
-              const { done, value } = await reader.read()
-              if (done) break
-              const chunk = decoder.decode(value)
-              buffer += chunk
-              let lines = buffer.split("\n")
-              buffer = lines.pop() || ""
-              for (const line of lines) {
-                if (line.trim() === "") continue
-                if (line.startsWith("data:")) {
-                  try {
-                    const jsonStr = line.substring(5).trim()
-                    if (!jsonStr) continue
-                    const data = JSON.parse(jsonStr)
-                    if ((data.event === "message" || data.event === "agent_message") && data.answer) {
-                      assistantMessage += data.answer
-                      setMessages((prev) => {
-                        const newMessages = [...prev]
-                        const lastMessage = newMessages[newMessages.length - 1]
-                        if (lastMessage && lastMessage.id === initialAssistantMessageId) {
-                          lastMessage.content = assistantMessage
-                          return [...newMessages]
-                        }
-                        return newMessages
-                      })
-                    } else if (data.event === "message_end") {
-                      setMessages((prev) => prev.map(msg => 
-                          msg.id === initialAssistantMessageId ? { ...msg, isStreaming: false } : msg
-                      ))
-                      // Don't set isLoading false here, wait for finally block
-                    }
-                  } catch (e) {
-                    console.error("解析SSE数据失败 (Form):", e, "原始数据:", line)
-                  }
-                }
-              }
-            }
-          } finally {
-            setMessages((prev) => prev.map(msg => 
-                msg.id === initialAssistantMessageId ? { ...msg, isStreaming: false } : msg
+      const response = await callDifyApi(
+        apiParams,
+        {
+          appId: appConfig.id,
+          appType: appConfig.type,
+          chatModel: appConfig.chatModel || "block",
+        },
+        // 流式数据处理
+        (content) => {
+          if (thinkingMessageId) {
+            setMessages(prev => prev.map(msg =>
+              msg.id === thinkingMessageId
+                ? { ...msg, content, isStreaming: true }
+                : msg
             ))
-            reader.releaseLock()
+            // 当开始收到流式数据时，关闭加载状态
+            if (content) {
+              setIsLoading(false)
+            }
           }
-          // --- End: Actual SSE Implementation --- 
-       } else {
-          // <<< Log 8b: Entering Blocking Branch >>>
-          console.log("FormChatAppDetail: Using Blocking fetch logic.");
-          // Blocking response for form chat
-          const response = await fetch(apiEndpoint, {
-             method: "POST",
-             headers: { "Content-Type": "application/json" },
-             body: JSON.stringify(requestBody),
-          });
-           if (!response.ok) {
-             const errorText = await response.text();
-             throw new Error(`表单对话请求失败: ${response.status} ${errorText}`);
-           }
-           const data = await response.json();
-           // <<< Log 9: Blocking response data >>>
-           console.log("FormChatAppDetail: Blocking response data:", data);
-           const assistantMessage: ChatMessage = {
-              id: data.message_id || `msg-${Date.now()}`,
-              content: data.answer || "收到表单，处理完成。",
-              role: "assistant",
-              timestamp: new Date(),
-              isStreaming: false,
-            };
-            setMessages((prev) => [...prev, assistantMessage]);
-       }
-      // --- End Fetch Logic --- 
+        },
+        // 流式结束处理
+        () => {
+          if (thinkingMessageId) {
+            setMessages(prev => prev.map(msg =>
+              msg.id === thinkingMessageId
+                ? { ...msg, isStreaming: false }
+                : msg
+            ))
+          }
+        }
+      )
 
+      if (response && thinkingMessageId) {
+        // 如果是阻塞式响应，更新消息内容
+        setMessages(prev => prev.map(msg =>
+          msg.id === thinkingMessageId
+            ? { ...msg, content: response.content, isStreaming: false }
+            : msg
+        ))
+        setIsLoading(false)
+      }
     } catch (error) {
-      // <<< Log 10: API Call Error >>>
-      console.error("FormChatAppDetail: 表单对话 API 调用失败:", error)
-      const errorMessage = error instanceof Error ? error.message : "处理表单提交时出错"
+      console.error("表单提交失败:", error)
+      const errorMessage = error instanceof Error ? error.message : "处理表单时出错"
+      // 移除正在思考的消息
+      if (thinkingMessageId) {
+        setMessages(prev => prev.filter(msg => msg.id !== thinkingMessageId))
+      }
        const errorChatMessage: ChatMessage = {
-          id: `err-${Date.now()}`,
+        id: `err-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
           role: "assistant",
           content: `错误: ${errorMessage}`,
           timestamp: new Date(),
           isStreaming: false, 
        }
-       setMessages((prev) => [...prev, errorChatMessage])
-       toast({ title: "错误", description: errorMessage, variant: "destructive" })
-      // <<< 新增：如果表单提交失败，可能需要清除保存的数据？>>>
-      // setSubmittedInputs(null);
-      // setSubmittedFiles(null);
-      // <<< 结束新增 >>>
+      setMessages(prev => [...prev, errorChatMessage])
+      toast({
+        title: "错误",
+        description: errorMessage,
+        variant: "destructive",
+      })
     } finally {
-      // <<< Log 11: Finally Block >>>
-      console.log("FormChatAppDetail: handleFormSubmit finally block.");
       setIsFormSubmitting(false)
       setIsLoading(false)
     }
@@ -806,15 +700,13 @@ export function FormChatAppDetail({ appConfig, className }: FormChatAppDetailPro
                     role={message.role}
                     content={renderMessageContent(message)}
                     timestamp={message.timestamp}
-                    appIcon={message.role === "assistant" ? getIconSrc() : undefined} // 只为助手消息传递应用图标
+                    appIcon={message.role === "assistant" ? getIconSrc() : undefined}
                     onCopy={handleCopyMessage}
                     onLike={handleLikeMessage}
                     onDislike={handleDislikeMessage}
+                    isStreaming={message.isStreaming}
                   />
                 ))}
-                {isLoading && (
-                  <Message role="assistant" content="正在思考..." isLoading={true} appIcon={getIconSrc()} />
-                )}
                 <div ref={messagesEndRef} />
               </div>
             </div>

@@ -10,18 +10,19 @@ import { Paperclip } from "lucide-react"
 import { getAppIconById, svgToDataUrl } from "@/lib/app-icons"
 import { SimpleChatInput } from "@/components/chat/simple-chat-input"
 import { cn } from "@/lib/utils"
+import { callDifyApi, type DifyApiParams } from "@/lib/dify-api"
 
 // 更新 UploadedFile 类型定义
 interface UploadedFile {
-  id: string // 这个 id 可能是前端生成的临时 ID
+  id: string
   name: string
   type: string
   size: number
   url?: string
   preview?: string
-  uploadFileId?: string // 从服务器获取的 ID
-  uploading?: boolean // 上传状态
-  error?: string // 上传错误信息
+  uploadFileId?: string
+  uploading?: boolean
+  error?: string
 }
 
 interface ChatAppDetailProps {
@@ -34,8 +35,21 @@ interface ChatMessage {
   role: "user" | "assistant"
   content: string
   timestamp: Date
-  files?: UploadedFile[] // 这里可能需要调整，或保留用于显示
+  files?: UploadedFile[]
   isStreaming?: boolean
+}
+
+interface RequestData {
+  inputs: string | Record<string, any>
+  user: string
+  conversation_id: string
+  response_mode: string
+  files?: Array<{
+    type: string
+    transfer_method: string
+    url: string
+    upload_file_id: string
+  }>
 }
 
 export function ChatAppDetail({ appConfig, className }: ChatAppDetailProps) {
@@ -43,7 +57,7 @@ export function ChatAppDetail({ appConfig, className }: ChatAppDetailProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [mounted, setMounted] = useState(false)
-  // <<< 新增状态：存储已上传成功并包含服务器 ID 的文件信息 >>>
+  const [error, setError] = useState<string | null>(null)
   const [uploadedFilesInfo, setUploadedFilesInfo] = useState<UploadedFile[]>([])
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
@@ -58,9 +72,131 @@ export function ChatAppDetail({ appConfig, className }: ChatAppDetailProps) {
     setMounted(true)
   }, [])
 
-  // <<< 新增：处理文件上传的函数 >>>
+  // 处理工作流响应
+  const handleWorkflowResponse = (data: any) => {
+    if (data.error) {
+      setError(data.error as string)
+      return
+    }
+
+    const content = data.answer || data.text || ""
+    updateMessageContent(content)
+  }
+
+  // 更新消息内容的函数
+  const updateMessageContent = (content: string) => {
+    setMessages(prevMessages => {
+      const newMessages = [...prevMessages]
+      const lastMessage = newMessages[newMessages.length - 1]
+      if (lastMessage) {
+        lastMessage.content = content
+        lastMessage.isStreaming = false
+      } else {
+        newMessages.push({
+          id: `msg-${Date.now()}`,
+          content,
+          role: 'assistant',
+          timestamp: new Date(),
+          isStreaming: false,
+        })
+      }
+      return newMessages
+    })
+  }
+
+  // 处理发送消息
+  const handleSendMessage = async (message: string, files?: UploadedFile[]) => {
+    setIsLoading(true)
+    setError(null)
+
+    // 添加用户消息到消息列表
+    const userMessage: ChatMessage = {
+      id: `user-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+      content: message,
+      role: 'user',
+      timestamp: new Date(),
+      files: files
+    }
+    setMessages(prev => [...prev, userMessage])
+
+    // 立即添加一个正在思考的助手消息
+    const thinkingMessageId = `thinking-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
+    setMessages(prev => [...prev, {
+      id: thinkingMessageId,
+      content: '正在思考...',
+      role: 'assistant',
+      timestamp: new Date(),
+      isStreaming: true
+    }])
+
+    try {
+      const response = await callDifyApi(
+        {
+          query: message,
+          user: 'user',
+          conversation_id: '',
+          inputs: {},
+          response_mode: appConfig.chatModel === 'sse' ? 'streaming' : 'blocking',
+          files: files?.filter(f => f.uploadFileId && !f.error).map(file => ({
+            type: file.type.startsWith('image/') ? 'image' : 'document',
+            transfer_method: 'local_file',
+            url: '',
+            upload_file_id: file.uploadFileId || ''
+          }))
+        },
+        {
+          appId: appConfig.id,
+          appType: AppType.CHAT,
+          chatModel: appConfig.chatModel || 'sse',
+        },
+        // 流式数据处理
+        (content) => {
+          setMessages(prev => prev.map(msg =>
+            msg.id === thinkingMessageId
+              ? { ...msg, content, isStreaming: true }
+              : msg
+          ))
+          // 当开始收到流式数据时，关闭加载状态
+          if (content) {
+            setIsLoading(false)
+          }
+        },
+        // 流式结束处理
+        () => {
+          setMessages(prev => prev.map(msg =>
+            msg.id === thinkingMessageId
+              ? { ...msg, isStreaming: false }
+              : msg
+          ))
+        }
+      )
+
+      if (response) {
+        // 如果是阻塞式响应，更新消息内容
+        setMessages(prev => prev.map(msg =>
+          msg.id === thinkingMessageId
+            ? { ...msg, content: response.content, isStreaming: false }
+            : msg
+        ))
+        setIsLoading(false)
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : '发送消息时出错'
+      setError(errorMessage)
+      toast({
+        title: "错误",
+        description: errorMessage,
+        variant: "destructive",
+      })
+      // 移除正在思考的消息
+      setMessages(prev => prev.filter(msg => msg.id !== thinkingMessageId))
+      setIsLoading(false)
+    }
+  }
+
+  // 处理文件上传
   const handleFileUpload = async (file: File): Promise<UploadedFile | null> => {
-    const tempId = `temp_${Date.now()}_${file.name}`
+    const tempId = `file_${Date.now()}_${Math.random().toString(36).substring(2, 9)}_${file.name}`
     const fileData: UploadedFile = {
       id: tempId,
       name: file.name,
@@ -68,20 +204,20 @@ export function ChatAppDetail({ appConfig, className }: ChatAppDetailProps) {
       size: file.size,
       uploading: true,
     }
+
     // 立即更新 UI 以显示上传中的文件
-    setUploadedFilesInfo((prev) => [...prev, fileData])
+    setUploadedFilesInfo(prev => [...prev, fileData])
 
     const formData = new FormData()
-    formData.append("file", file)
-    formData.append("user", "test_user") // 或者从用户上下文获取
+    formData.append('file', file)
+    formData.append('user', 'test_user')
 
     try {
       const response = await fetch(
         `http://localhost:8087/api/dify/files/upload?appId=${appConfig.id}`,
         {
-          method: "POST",
+          method: 'POST',
           body: formData,
-          // 注意：不需要手动设置 Content-Type，浏览器会自动处理 FormData
         }
       )
 
@@ -92,267 +228,46 @@ export function ChatAppDetail({ appConfig, className }: ChatAppDetailProps) {
 
       const result = await response.json()
       if (!result.id) {
-        throw new Error("上传成功，但响应中缺少文件 ID")
+        throw new Error('上传成功，但响应中缺少文件 ID')
       }
 
-      // 更新文件信息，包含服务器返回的 ID，并标记上传完成
       const uploadedFileInfo: UploadedFile = {
         ...fileData,
         uploadFileId: result.id,
         uploading: false,
       }
-      setUploadedFilesInfo((prev) => 
+
+      setUploadedFilesInfo(prev => 
         prev.map(f => f.id === tempId ? uploadedFileInfo : f)
       )
+
       toast({
-        title: "成功",
+        title: '成功',
         description: `${file.name} 上传成功。`,
       })
-      return uploadedFileInfo // 返回包含服务器 ID 的文件信息
 
+      return uploadedFileInfo
     } catch (error) {
-      console.error("文件上传失败:", error)
-      const errorMessage = error instanceof Error ? error.message : "未知上传错误"
-      // 更新文件信息，标记上传失败
-      setUploadedFilesInfo((prev) => 
-        prev.map(f => f.id === tempId ? { ...fileData, uploading: false, error: errorMessage } : f)
+      console.error('文件上传失败:', error)
+      const errorMessage = error instanceof Error ? error.message : '未知上传错误'
+      
+      setUploadedFilesInfo(prev =>
+        prev.map(f => f.id === tempId ? { ...f, uploading: false, error: errorMessage } : f)
       )
+
       toast({
-        title: "上传失败",
+        title: '上传失败',
         description: `${file.name} 上传失败: ${errorMessage}`,
-        variant: "destructive",
+        variant: 'destructive',
       })
-      return null // 上传失败返回 null
+
+      return { ...fileData, uploading: false, error: errorMessage }
     }
   }
 
-  // 处理发送消息
-  const handleSendMessage = async (content: string, /* files?: UploadedFile[] */) => {
-    // 注意：现在不再直接从 SimpleChatInput 接收 files 参数
-    // 我们将使用 uploadedFilesInfo state
-
-    // 添加用户消息（可以考虑是否仍在此处显示文件，或仅在输入框显示）
-    const userMessage: ChatMessage = {
-      id: Date.now().toString(),
-      role: "user",
-      content,
-      timestamp: new Date(),
-      // files: uploadedFilesInfo, // 考虑是否需要显示在消息气泡中
-    }
-    setMessages((prev) => [...prev, userMessage])
-    setIsLoading(true)
-
-    try {
-      // <<< 修改：构建包含文件信息的请求体 >>>
-      const requestBody: any = {
-        query: content,
-        user: "test_user",
-        conversation_id: "", // 可以添加会话ID管理
-        inputs: {},
-        response_mode: appConfig.chatModel === "sse" ? "streaming" : "blocking",
-        auto_generate_name: true,
-      }
-
-      // 如果有上传成功的文件，构建 inputs 和 files 字段
-      if (uploadedFilesInfo.length > 0) {
-        const successfulUploads = uploadedFilesInfo.filter(f => f.uploadFileId && !f.error)
-        if (successfulUploads.length > 0) {
-          // 假设第一个文件是 paper1 (根据你的示例)
-          // 如果需要处理多个文件或不同 input key，需要更复杂的逻辑
-          const firstFile = successfulUploads[0]
-          requestBody.inputs = {
-             // 注意：这里的 key "paper1" 需要根据实际应用配置动态确定
-            "paper1": { 
-              "type": "document", 
-              "transfer_method": "local_file", 
-              "url": "", 
-              "upload_file_id": firstFile.uploadFileId 
-            }
-          }
-          requestBody.files = successfulUploads.map(file => ({
-            type: "document", // 或根据 file.type 决定
-            transfer_method: "local_file",
-            url: "",
-            upload_file_id: file.uploadFileId,
-          }))
-        } else {
-           console.warn("没有成功上传的文件可用于发送。")
-           // 可以选择是否继续发送不带文件的消息，或者提示用户
-        }
-      }
-
-      // 根据应用类型选择API端点
-      let apiEndpoint = ""
-      switch (appConfig.type) {
-        case AppType.CHAT:
-          apiEndpoint = `http://localhost:8087/api/dify/chat-messages?appId=${appConfig.id}`
-          break
-        case AppType.FORM_CHAT:
-          apiEndpoint = `http://localhost:8087/api/dify/form-chat-messages?appId=${appConfig.id}`
-          break
-        default:
-          apiEndpoint = `http://localhost:8087/api/dify/chat-messages?appId=${appConfig.id}`
-      }
-
-      console.log("调用API端点:", apiEndpoint)
-      console.log("请求参数:", requestBody)
-      console.log(
-        `检查 chatModel: 值='${appConfig.chatModel}', 类型=${typeof appConfig.chatModel}`
-      );
-
-      if (appConfig.chatModel === "sse") {
-        console.log("路径：处理 SSE 流式响应");
-        // 流式响应
-        const response = await fetch(apiEndpoint, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Accept": "text/event-stream",
-          },
-          body: JSON.stringify(requestBody),
-        })
-
-        if (!response.ok) {
-          const errorText = await response.text()
-          console.error("SSE请求失败:", errorText)
-          throw new Error(`请求失败: ${response.status} ${response.statusText}`)
-        }
-
-        const reader = response.body?.getReader()
-        if (!reader) throw new Error("无法读取响应流")
-
-        let assistantMessage = ""
-        const decoder = new TextDecoder()
-        let buffer = "" // 用于存储不完整的数据行
-
-        // 创建一个空的、标记为流式的助手消息
-        const initialAssistantMessageId = `msg-${Date.now()}`
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: initialAssistantMessageId,
-            content: "",
-            role: "assistant",
-            timestamp: new Date(),
-            isStreaming: true,
-          },
-        ])
-
-        try {
-          while (true) {
-            const { done, value } = await reader.read()
-            if (done) break
-
-            const chunk = decoder.decode(value)
-            buffer += chunk
-            
-            // 处理完整的行
-            let lines = buffer.split("\n")
-            // 最后一行可能不完整，保留到下一次处理
-            buffer = lines.pop() || ""
-
-            for (const line of lines) {
-              if (line.trim() === "") continue // 跳过空行
-              
-              // 检查是否是SSE数据行
-              if (line.startsWith("data:")) {
-                try {
-                  // 提取JSON部分，去除 "data:" 前缀，并处理可能的多余空格
-                  const jsonStr = line.substring(5).trim()
-                  if (!jsonStr) continue // 跳过空数据
-                  
-                  const data = JSON.parse(jsonStr)
-                  console.log("解析的SSE数据:", data)
-
-                  if ((data.event === "message" || data.event === "agent_message") && data.answer) {
-                    assistantMessage += data.answer
-                    // 更新最后一条流式消息的内容
-                    setMessages((prev) => {
-                      const newMessages = [...prev]
-                      const lastMessage = newMessages[newMessages.length - 1]
-                      // 确保更新的是正确的流式消息
-                      if (lastMessage && lastMessage.id === initialAssistantMessageId) {
-                        lastMessage.content = assistantMessage
-                        return [...newMessages]
-                      }
-                      return newMessages
-                    })
-                  } else if (data.event === "message_end") {
-                    console.log("会话结束，会话ID:", data.conversation_id)
-                    // 找到对应的消息并标记为非流式
-                    setMessages((prev) => prev.map(msg => 
-                        msg.id === initialAssistantMessageId ? { ...msg, isStreaming: false } : msg
-                    ))
-                    setIsLoading(false)
-                  }
-                } catch (e) {
-                  console.error("解析SSE数据失败:", e, "原始数据:", line)
-                  continue // 跳过错误的数据，继续处理下一行
-                }
-              }
-            }
-          }
-        } finally {
-          // 如果流异常结束，确保最后一条消息标记为非流式
-          setMessages((prev) => prev.map(msg => 
-              msg.id === initialAssistantMessageId ? { ...msg, isStreaming: false } : msg
-          ))
-          reader.releaseLock()
-          setIsLoading(false)
-        }
-      } else {
-        console.log("路径：处理 Blocking 阻塞式响应");
-        // 阻塞式响应
-        const response = await fetch(apiEndpoint, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(requestBody),
-        })
-
-        if (!response.ok) {
-          const errorText = await response.text()
-          console.error("请求失败:", errorText)
-          throw new Error(`请求失败: ${response.status} ${response.statusText}`)
-        }
-
-        // 克隆响应以读取文本，避免消耗原始响应体
-        const responseText = await response.clone().text()
-        console.log("收到的 Blocking 响应原始文本:", responseText)
-
-        // 这里的 response.json() 可能是错误来源
-        const data = await response.json()
-        console.log("解析后的 Blocking 响应数据:", data)
-
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: data.message_id || `msg-${Date.now()}`,
-            content: data.answer || "无回复内容",
-        role: "assistant",
-        timestamp: new Date(),
-            isStreaming: false,
-          },
-        ])
-        setIsLoading(false)
-      }
-
-      // <<< 新增：发送成功后清空已上传文件信息 >>>
-      setUploadedFilesInfo([])
-
-    } catch (error) {
-      console.error("发送消息失败 (Outer Catch):", error)
-      toast({
-        title: "错误",
-        description:
-          error instanceof Error ? error.message : "发送消息失败，请稍后重试",
-        variant: "destructive",
-      })
-      setIsLoading(false)
-      // 考虑是否在此处也清空 uploadedFilesInfo
-      // setUploadedFilesInfo([]) 
-    }
+  // 处理文件移除
+  const handleFileRemove = (fileId: string) => {
+    setUploadedFilesInfo(prev => prev.filter(file => file.id !== fileId))
   }
 
   // 处理复制消息
@@ -397,46 +312,19 @@ export function ChatAppDetail({ appConfig, className }: ChatAppDetailProps) {
     return svgToDataUrl(svgIcon)
   }
 
-  // 渲染消息内容，包括文件预览
-  const renderMessageContent = (message: ChatMessage) => {
-    return (
-      <>
-        <div className="whitespace-pre-wrap">{message.content}</div>
-
-        {/* 文件预览 */}
-        {message.files && message.files.length > 0 && (
-          <div className="mt-3 flex flex-wrap gap-2">
-            {message.files.map((file) => (
-              <div key={file.id} className="relative">
-                {file.preview ? (
-                  // 图片预览
-                  <div className="max-w-[200px] max-h-[150px] overflow-hidden rounded-md border border-gray-200 dark:border-gray-700">
-                    <img
-                      src={file.preview || "/placeholder.svg"}
-                      alt={file.name}
-                      className="w-full h-full object-cover"
-                      onClick={() => window.open(file.preview, "_blank")}
-                      style={{ cursor: "pointer" }}
-                    />
-                  </div>
-                ) : (
-                  // 文件链接
-                  <a
-                    href={file.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-2 p-2 bg-gray-100 dark:bg-gray-800 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700"
-                  >
-                    <Paperclip className="h-4 w-4" />
-                    <span className="text-sm truncate max-w-[150px]">{file.name}</span>
-                  </a>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-      </>
-    )
+  // 渲染消息内容
+  const renderMessageContent = (content: any): string => {
+    if (typeof content === 'string') {
+      return content;
+    }
+    if (typeof content === 'object') {
+      try {
+        return JSON.stringify(content, null, 2);
+      } catch (e) {
+        return String(content);
+      }
+    }
+    return String(content);
   }
 
   return (
@@ -467,7 +355,7 @@ export function ChatAppDetail({ appConfig, className }: ChatAppDetailProps) {
                 key={message.id}
                 id={message.id}
                 role={message.role}
-                content={renderMessageContent(message)}
+                content={renderMessageContent(message.content)}
                 timestamp={message.timestamp}
                 appIcon={message.role === "assistant" ? getIconSrc() : undefined}
                 onCopy={handleCopyMessage}
@@ -476,7 +364,6 @@ export function ChatAppDetail({ appConfig, className }: ChatAppDetailProps) {
                 isStreaming={message.isStreaming}
               />
             ))}
-            {isLoading && <Message role="assistant" content="正在思考..." isLoading={true} appIcon={getIconSrc()} />}
             <div ref={messagesEndRef} />
           </div>
         </div>
@@ -489,7 +376,7 @@ export function ChatAppDetail({ appConfig, className }: ChatAppDetailProps) {
               appId={appConfig.id}
               onFileUpload={handleFileUpload}
               uploadedFiles={uploadedFilesInfo}
-              onRemoveFile={(id: string) => setUploadedFilesInfo(prev => prev.filter(f => f.id !== id))}
+              onRemoveFile={handleFileRemove}
               isLoading={isLoading}
               placeholder="有问题，尽管问..."
             />

@@ -68,7 +68,7 @@ export function ChatInput({
             <Textarea
               ref={textareaRef}
               placeholder={placeholder}
-              className="w-full border-0 bg-transparent focus-visible:ring-0 resize-none p-0 min-h-[40px] max-h-[200px] placeholder:text-gray-400 text-gray-700 dark:text-gray-300"
+              className="w-full border-0 bg-transparent focus-visible:ring-0 resize-none p-0 min-h-[40px] max-h-[200px] placeholder:text-gray-400 text-gray-700 dark:text-gray-300 text-sm"
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}

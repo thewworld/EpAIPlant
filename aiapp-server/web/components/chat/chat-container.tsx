@@ -1,52 +1,81 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { useParams } from "next/navigation"
 import { useToast } from "@/components/ui/use-toast"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Card } from "@/components/ui/card"
-import { Loader2, Send } from "lucide-react"
+import { Loader2, Send, XCircle, X } from "lucide-react"
+import { callDifyApi, type DifyApiParams } from "@/lib/dify-api"
+import { AppType } from "@/types/app-config"
 
-interface Message {
+interface ChatMessage {
   id: string
-  content: string
+  content: string | object
   role: "user" | "assistant"
-  timestamp: number | Date
-  files?: any[] // 添加文件属性
+  timestamp: number
+  isStreaming?: boolean
 }
 
 interface ChatContainerProps {
   appId: string
-  appType: string
-  chatModel: string
+  appType?: AppType
+  chatModel?: string
   className?: string
-  messages?: Message[] // 添加消息列表属性
-  isLoading?: boolean // 添加加载状态属性
-  onSendMessage?: (message: string, files?: any[]) => void // 添加发送消息回调
+  messages?: ChatMessage[]
+  isLoading?: boolean
+  onSendMessage?: (message: string, files?: UploadedFile[]) => void
+}
+
+// 添加类型定义
+interface ApiResponse {
+  message_id: string;
+  answer: string;
+  conversation_id: string;
+  event?: string;
+}
+
+interface RequestBody {
+  message: string;
+  conversation_id?: string;
+  files?: UploadedFile[];
+  stream?: boolean;
+}
+
+// 导入或定义 UploadedFile 接口
+interface UploadedFile {
+  id: string
+  name: string
+  type: string
+  size: number
+  url?: string
+  preview?: string
+  uploadFileId?: string
+  uploading?: boolean
+  error?: string
 }
 
 export function ChatContainer({ 
-  appId, 
-  appType, 
-  chatModel, 
-  className,
-  messages: externalMessages,
-  isLoading: externalLoading,
-  onSendMessage: externalSendMessage
+  appId,
+  appType = AppType.CHAT,
+  chatModel = "sse",
+  className = "",
+  messages: externalMessages = [],
+  isLoading: externalLoading = false,
+  onSendMessage: externalSendMessage,
 }: ChatContainerProps) {
   const { toast } = useToast()
-  const [internalMessages, setInternalMessages] = useState<Message[]>([])
+  const [internalMessages, setInternalMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState("")
   const [internalLoading, setInternalLoading] = useState(false)
   const [conversationId, setConversationId] = useState<string>("")
+  const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([])
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
 
-  // 使用外部消息或内部消息
-  const messages = externalMessages || internalMessages
-  // 使用外部加载状态或内部加载状态
-  const isLoading = externalLoading !== undefined ? externalLoading : internalLoading
+  // 计算当前消息列表
+  const messages = externalMessages.length > 0 ? externalMessages : internalMessages
+  const isLoading = externalLoading || internalLoading
 
   // 自动滚动到底部
   const scrollToBottom = () => {
@@ -57,159 +86,138 @@ export function ChatContainer({
     scrollToBottom()
   }, [messages])
 
-  // 发送消息
-  const sendMessage = async () => {
-    if (!input.trim() || isLoading) return
+  // 处理文件上传
+  const handleFileUpload = (files: UploadedFile[]) => {
+    setUploadedFiles((prev) => [...prev, ...files])
+  }
 
+  // 处理文件删除
+  const handleFileDelete = (fileId: string) => {
+    setUploadedFiles((prev) => prev.filter((file) => file.id !== fileId))
+  }
+
+  const sendMessage = async () => {
+    if (!input.trim()) return
+
+    // 如果提供了外部发送消息方法，使用它
     if (externalSendMessage) {
-      // 如果提供了外部发送消息方法，则使用它
-      externalSendMessage(input, [])
+      externalSendMessage(input.trim(), uploadedFiles)
       setInput("")
+      setUploadedFiles([])
       return
     }
 
-    // 否则使用内部发送消息逻辑
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      content: input,
+    // 验证文件状态
+    const validFiles = uploadedFiles.filter(file => !file.error && !file.uploading)
+    if (uploadedFiles.length > 0 && validFiles.length === 0) {
+      toast({
+        title: "文件上传错误",
+        description: "请等待文件上传完成或删除上传失败的文件",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setInternalLoading(true)
+    const userMessage = input.trim()
+    setInput("")
+    setUploadedFiles([])
+
+    // 添加用户消息
+    const newUserMessage: ChatMessage = {
+      id: `user-${Date.now()}`,
+      content: userMessage,
       role: "user",
       timestamp: Date.now(),
     }
+    setInternalMessages((prev) => [...prev, newUserMessage])
 
-    setInternalMessages((prev) => [...prev, userMessage])
-    setInput("")
-    setInternalLoading(true)
-
-    // 准备请求参数
-    const requestBody = {
-      query: input,
-      user: "test_user", // 这里可以从用户上下文获取
-      conversation_id: conversationId || undefined,
-      inputs: {},
-      files: [],
-      response_mode: chatModel === "sse" ? "streaming" : "blocking",
-      auto_generate_name: true,
-    }
-
-    // 根据应用类型选择API端点
-    let apiEndpoint = ""
-    switch (appType) {
-      case "Chat":
-        apiEndpoint = `/api/dify/chat-messages?appId=${appId}`
-        break
-      case "Workflow":
-        apiEndpoint = `/api/dify/workflow-messages?appId=${appId}`
-        break
-      case "Completion":
-        apiEndpoint = `/api/dify/completion-messages?appId=${appId}`
-        break
-      default:
-        apiEndpoint = `/api/dify/chat-messages?appId=${appId}`
+    // 如果是流式响应，先添加一个空的助手消息
+    const initialAssistantMessageId = chatModel === "sse" ? `msg-${Date.now()}` : undefined
+    if (initialAssistantMessageId) {
+      setInternalMessages((prev) => [
+        ...prev,
+        {
+          id: initialAssistantMessageId,
+          content: "",
+          role: "assistant",
+          timestamp: Date.now(),
+          isStreaming: true,
+        },
+      ])
     }
 
     try {
-      if (chatModel === "sse") {
-        // 流式响应
-        const response = await fetch(apiEndpoint, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(requestBody),
-        })
+      const apiParams: DifyApiParams = {
+        query: userMessage,
+        user: "test_user",
+        conversation_id: conversationId || undefined,
+        inputs: {},
+        files: validFiles,
+        auto_generate_name: true,
+      }
 
-        if (!response.ok) {
-          const errorText = await response.text()
-          console.error("SSE请求失败:", errorText)
-          throw new Error(`请求失败: ${response.status} ${response.statusText}`)
+      const response = await callDifyApi(
+        apiParams,
+        {
+          appId,
+          appType,
+          chatModel,
+        },
+        // 流式数据处理
+        initialAssistantMessageId ? (content) => {
+          setInternalMessages((prev) => prev.map((msg) =>
+            msg.id === initialAssistantMessageId
+              ? { ...msg, content }
+              : msg
+          ))
+        } : undefined,
+        // 流式结束处理
+        initialAssistantMessageId ? () => {
+          setInternalMessages((prev) => prev.map((msg) =>
+            msg.id === initialAssistantMessageId
+              ? { ...msg, isStreaming: false }
+              : msg
+          ))
+        } : undefined
+      )
+
+      if (!initialAssistantMessageId && response) {
+        const assistantMessage: ChatMessage = {
+          id: response.messageId || `msg-${Date.now()}`,
+          content: response.content,
+          role: "assistant",
+          timestamp: Date.now(),
+          isStreaming: false,
         }
-
-        const reader = response.body?.getReader()
-        if (!reader) throw new Error("无法读取响应流")
-
-        let assistantMessage = ""
-        const decoder = new TextDecoder()
-
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
-
-          const chunk = decoder.decode(value)
-          console.log("收到SSE数据块:", chunk) // 添加调试日志
-
-          const lines = chunk.split("\n")
-          for (const line of lines) {
-            if (line.startsWith("data:")) {
-              try {
-                const data = JSON.parse(line.slice(5))
-                console.log("解析的SSE数据:", data) // 添加调试日志
-
-                if (data.event === "message") {
-                  if (data.answer) {
-                    assistantMessage += data.answer
-                    setInternalMessages((prev) => {
-                      const newMessages = [...prev]
-                      const lastMessage = newMessages[newMessages.length - 1]
-                      if (lastMessage && lastMessage.role === "assistant") {
-                        lastMessage.content = assistantMessage
-                      } else {
-                        newMessages.push({
-                          id: data.message_id || `msg-${Date.now()}`,
-                          content: assistantMessage,
-                          role: "assistant",
-                          timestamp: Date.now(),
-                        })
-                      }
-                      return newMessages
-                    })
-                  }
-                } else if (data.event === "message_end" && data.conversation_id) {
-                  setConversationId(data.conversation_id)
-                }
-              } catch (e) {
-                console.error("解析SSE数据失败:", e, "原始数据:", line.slice(5))
-              }
-            }
-          }
-        }
-      } else {
-        // 阻塞式响应
-        const response = await fetch(apiEndpoint, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(requestBody),
-        })
-
-        if (!response.ok) throw new Error("请求失败")
-
-        const data = await response.json()
-        setInternalMessages((prev) => [
-          ...prev,
-          {
-            id: data.message_id,
-            content: data.answer,
-            role: "assistant",
-            timestamp: Date.now(),
-          },
-        ])
-        setConversationId(data.conversation_id)
+        setInternalMessages((prev) => [...prev, assistantMessage])
       }
     } catch (error) {
-      if (error instanceof Error && error.name === "AbortError") {
-        console.log("请求已取消")
-      } else {
-        console.error("发送消息失败:", error)
-        toast({
-          title: "错误",
-          description: "发送消息失败，请稍后重试",
-          variant: "destructive",
-        })
-      }
+      handleError(error)
     } finally {
       setInternalLoading(false)
       abortControllerRef.current = null
+    }
+  }
+
+  // 处理错误
+  const handleError = (error: unknown) => {
+    if (error instanceof Error) {
+      if (error.name === "AbortError") {
+        console.log("请求已取消")
+        toast({
+          title: "已取消",
+          description: "消息发送已取消",
+          duration: 2000,
+        })
+      } else {
+        console.error("发送消息失败:", error.message)
+        toast({
+          title: "错误",
+          description: `发送消息失败: ${error.message}`,
+          variant: "destructive",
+        })
+      }
     }
   }
 
@@ -219,6 +227,36 @@ export function ChatContainer({
       abortControllerRef.current.abort()
       setInternalLoading(false)
     }
+  }
+
+  const handleCopyMessage = async (content: string) => {
+    try {
+      const textContent = typeof content === 'object' ? JSON.stringify(content) : String(content)
+      await navigator.clipboard.writeText(textContent)
+      toast({
+        title: "已复制",
+        description: "消息内容已复制到剪贴板",
+        duration: 2000,
+      })
+    } catch (error) {
+      console.error("复制失败:", error)
+      toast({
+        title: "复制失败",
+        description: "无法复制消息内容",
+        variant: "destructive",
+      })
+    }
+  }
+
+  // 渲染消息内容
+  const renderMessageContent = (content: any): string => {
+    if (typeof content === 'string') {
+      return content
+    }
+    if (typeof content === 'object') {
+      return JSON.stringify(content)
+    }
+    return String(content)
   }
 
   return (
@@ -245,8 +283,12 @@ export function ChatContainer({
                 {message.role === "user" ? "U" : "A"}
               </div>
               <div className="flex-1">
-                <p className="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap">
-                  {message.content}
+                <p 
+                  className="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 p-1 rounded" 
+                  onClick={() => handleCopyMessage(renderMessageContent(message.content))}
+                  title="点击复制消息内容"
+                >
+                  {renderMessageContent(message.content)}
                 </p>
               </div>
             </div>
@@ -254,6 +296,34 @@ export function ChatContainer({
         ))}
         <div ref={messagesEndRef} />
       </div>
+
+      {/* 文件上传区域 */}
+      {uploadedFiles.length > 0 && (
+        <div className="border-t border-gray-200 dark:border-gray-700 p-4">
+          <div className="flex flex-wrap gap-2">
+            {uploadedFiles.map((file) => (
+              <div
+                key={file.id}
+                className="flex items-center gap-2 bg-gray-100 dark:bg-gray-800 rounded p-2"
+              >
+                <span className="text-sm truncate max-w-[200px]">{file.name}</span>
+                {file.uploading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : file.error ? (
+                  <XCircle className="h-4 w-4 text-red-500" />
+                ) : (
+                  <button
+                    onClick={() => handleFileDelete(file.id)}
+                    className="text-gray-500 hover:text-red-500"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* 输入区域 */}
       <div className="border-t border-gray-200 dark:border-gray-700 p-4">
@@ -289,7 +359,7 @@ export function ChatContainer({
                 variant="outline"
                 className="h-10 w-10 p-0"
               >
-                ×
+                <X className="h-4 w-4" />
               </Button>
             )}
           </div>

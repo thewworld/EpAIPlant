@@ -4,7 +4,7 @@ setAppConfig({
   id: data.id.toString(),
   name: data.name || "未命名应用",
   description: data.description || "无描述",
-  type: formConfig ? "form_chat" as AppType : "chat" as AppType,
+  type: data.type || AppType.CHAT,
   icon: getAppIconById(data.id.toString()) || "",
   introMessages: data.openerContent ? [{ content: data.openerContent }] : [{ content: "欢迎使用此应用！" }],
   formConfig: formConfig,

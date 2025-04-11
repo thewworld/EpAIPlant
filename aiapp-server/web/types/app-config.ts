@@ -1,7 +1,8 @@
 // 应用类型枚举
 export enum AppType {
-  CHAT = "chat", // 纯对话类应用
-  FORM_CHAT = "form_chat", // 表单对话类应用
+  CHAT = "Chat", // 对话式应用
+  WORKFLOW = "Workflow", // 工作流应用
+  COMPLETION = "Completion", // 文本生成应用
 }
 
 // 表单字段类型枚举

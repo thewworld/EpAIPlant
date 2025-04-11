@@ -49,35 +49,39 @@ export function Message({
 
   // 处理复制内容
   const handleCopy = () => {
-    // 如果内容是字符串，直接复制
+    let textToCopy = '';
+    
     if (typeof content === "string") {
-      navigator.clipboard.writeText(content).then(() => {
-        setCopied(true)
-        if (onCopy) onCopy(content)
-
-        // 2秒后重置复制状态
-        setTimeout(() => {
-          setCopied(false)
-        }, 2000)
-      })
+      textToCopy = content;
+    } else if (content && typeof content === "object") {
+      if (React.isValidElement(content)) {
+        // 如果是 React 元素，尝试获取其文本内容
+        const tempDiv = document.createElement("div");
+        tempDiv.innerHTML = content.toString();
+        textToCopy = tempDiv.textContent || tempDiv.innerText || "";
+      } else {
+        // 如果是普通对象，转换为字符串
+        try {
+          textToCopy = JSON.stringify(content, null, 2);
+        } catch (e) {
+          textToCopy = String(content);
+        }
+      }
     } else {
-      // 如果内容是JSX，尝试提取文本内容
-      const tempDiv = document.createElement("div")
-      // 这里使用一个简单的方法来尝试提取文本
-      // 注意：这种方法可能不完美，特别是对于复杂的JSX结构
-      tempDiv.innerHTML = content.toString()
-      const textContent = tempDiv.textContent || tempDiv.innerText || ""
-
-      navigator.clipboard.writeText(textContent).then(() => {
-        setCopied(true)
-        if (onCopy) onCopy(textContent)
-
-        // 2秒后重置复制状态
-        setTimeout(() => {
-          setCopied(false)
-        }, 2000)
-      })
+      textToCopy = String(content || '');
     }
+
+    navigator.clipboard.writeText(textToCopy).then(() => {
+      setCopied(true);
+      if (onCopy) onCopy(textToCopy);
+
+      // 2秒后重置复制状态
+      setTimeout(() => {
+        setCopied(false);
+      }, 2000);
+    }).catch(error => {
+      console.error('复制失败:', error);
+    });
   }
 
   // 处理点赞
