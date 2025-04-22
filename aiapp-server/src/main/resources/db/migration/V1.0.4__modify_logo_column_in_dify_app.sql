@@ -1,0 +1,2 @@
+-- 修改logo字段类型，从TEXT改为MEDIUMTEXT以支持更大的图片数据
+ALTER TABLE dify_app MODIFY COLUMN logo MEDIUMTEXT COMMENT '应用logo，支持SVG、PNG、JPG、JPEG、WEBP、GIF等格式图片'; 

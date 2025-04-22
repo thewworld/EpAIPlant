@@ -1,0 +1,51 @@
+server:
+  port: 8087
+spring:
+  #application:
+    #name: aiapp-service
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://172.16.1.23:10007/aiapp?allowPublicKeyRetrieval=true&useUnicode=true&characterEncoding=utf-8&autoReconnect=true&zeroDateTimeBehavior=convertToNull&useSSL=false&serverTimezone=Asia/Shanghai
+    username: eplugger
+    password: eP08icex
+    #url: jdbc:mysql://127.0.0.1:3306/aiapp?allowPublicKeyRetrieval=true&useUnicode=true&characterEncoding=utf-8&autoReconnect=true&zeroDateTimeBehavior=convertToNull&useSSL=false&serverTimezone=Asia/Shanghai
+    #username: root
+    #password: 123456a
+  jpa:
+    database-platform: org.hibernate.dialect.MySQLDialect
+    show-sql: true
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        format_sql: true
+  ai:
+    openai:
+      chat:
+        options:
+          model: qwen-max-0125
+          max-tokens: 2048
+      base-url: https://dashscope.aliyuncs.com/compatible-mode
+      api-key: sk-fe846fcbf43645cc99d9280ea96d0438
+
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 10MB
+
+# 日志配置
+logging:
+  level:
+    com.eplugger: DEBUG  # 应用日志级别
+    org.springframework.web: INFO  # Spring Web日志级别
+    org.hibernate.SQL: DEBUG  # SQL日志
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE  # SQL参数日志
+
+# Dify API配置
+dify:
+  api:
+    # 官方API地址
+    base-url: http://172.16.1.40/v1
+    # 本地部署地址示例
+    # base-url: http://localhost:5000/v1
+    api-key: app-S1gSw4JkID6ZYJRdSxmLsCk5
