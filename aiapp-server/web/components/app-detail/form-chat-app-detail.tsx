@@ -157,7 +157,7 @@ export function FormChatAppDetail({ appConfig, className }: FormChatAppDetailPro
         }
       )
 
-      if (response) {
+      if (response && thinkingMessageId) {
         // 如果是阻塞式响应，更新消息内容
         setMessages(prev => prev.map(msg =>
           msg.id === thinkingMessageId
@@ -212,22 +212,29 @@ export function FormChatAppDetail({ appConfig, className }: FormChatAppDetailPro
             if (successfulUploads.length > 0) {
             userContentParts.push(`${fieldConfig?.label || fieldId}: ${successfulUploads.map(f => f.name).join(', ')}`)
                 
-            // 处理表单文件字段，添加到 inputs 中
-                    if (fieldId === "paper1" && successfulUploads[0]) {
-                         currentFormInputs[fieldId] = {
-                            type: "document",
-                    transfer_method: "local_file",
-                            url: "",
-                            upload_file_id: successfulUploads[0].uploadFileId
-              }
+            // 处理表单文件字段
+            // 检查原始字段数据以确定文件处理方式
+            const originalData = fieldConfig.originalData || {};
+            const controlType = Object.keys(originalData).find(key => 
+              ['file', 'file-list'].includes(key)
+            );
+            
+            if (controlType === 'file-list') {
+              // 文件列表类型 - 处理多个文件
+              currentFormInputs[fieldId] = successfulUploads.map(file => ({
+                type: file.type.startsWith("image/") ? "image" : "document",
+                transfer_method: "local_file",
+                url: "",
+                upload_file_id: file.uploadFileId
+              }));
             } else {
-              // 其他文件字段也按照相同格式处理
+              // 单文件类型 - 使用第一个文件
               currentFormInputs[fieldId] = {
-                type: "document",
+                type: successfulUploads[0].type.startsWith("image/") ? "image" : "document",
                 transfer_method: "local_file",
                 url: "",
                 upload_file_id: successfulUploads[0].uploadFileId
-              }
+              };
             }
           } else {
             userContentParts.push(`${fieldConfig?.label || fieldId}: (无有效上传文件)`)
@@ -347,7 +354,19 @@ export function FormChatAppDetail({ appConfig, className }: FormChatAppDetailPro
 
   // 处理表单重置
   const handleFormReset = () => {
-    // 表单重置逻辑
+    // 清除已提交的表单状态
+    setSubmittedInputs(null);
+    setSubmittedFiles([]);
+    
+    // 清除聊天文件上传
+    setChatUploadedFiles([]);
+    
+    // 通知用户表单已重置
+    toast({
+      title: "表单已重置",
+      description: "所有字段已重置为默认值",
+      duration: 2000,
+    });
   }
 
   // 处理复制消息
@@ -498,18 +517,35 @@ export function FormChatAppDetail({ appConfig, className }: FormChatAppDetailPro
       // <<< Automatically update submittedInputs and submittedFiles state >>>
       setSubmittedInputs(prevInputs => {
          const newInputs = { ...(prevInputs || {}) };
+         
+         // 获取字段配置，检查是否为file-list类型
+         const fieldConfig = appConfig.formConfig?.fields.find(f => f.id === fieldId);
+         const originalData = fieldConfig?.originalData || {};
+         const controlType = Object.keys(originalData).find(key => 
+           ['file', 'file-list'].includes(key)
+         );
+         
          const inputData = {
              type: file.type.startsWith("image/") ? "image" : "document",
              transfer_method: "local_file",
              url: "",
              upload_file_id: result.id,
          };
-         // Handle multiple files for one fieldId if form allows (e.g., store as array)
-         // Simple case: Assume one file per field or overwrite
-         newInputs[fieldId] = inputData; // Example: Directly set/overwrite for the fieldId
-         // Specific logic for "paper1" if needed:
-         // if (fieldId === "paper1") { newInputs[fieldId] = inputData; }
 
+         // 处理file-list类型（支持多文件）
+         if (controlType === 'file-list') {
+           // 如果已经有文件，则添加到数组中
+           if (Array.isArray(newInputs[fieldId])) {
+             newInputs[fieldId] = [...newInputs[fieldId], inputData];
+           } else {
+             // 否则创建新数组
+             newInputs[fieldId] = [inputData];
+           }
+         } else {
+           // 单文件类型，直接替换
+           newInputs[fieldId] = inputData;
+         }
+         
          console.log(`FormChatAppDetail: Auto-updating submittedInputs for field '${fieldId}'`, newInputs);
          return newInputs;
       });
@@ -547,32 +583,51 @@ export function FormChatAppDetail({ appConfig, className }: FormChatAppDetailPro
       console.log(`FormChatAppDetail: Removing file from form: fieldId=${fieldId}, fileId=${fileIdToRemove}`);
 
       let uploadFileIdToRemove: string | undefined = undefined;
+      
+      // 获取字段配置，检查是否为file-list类型
+      const fieldConfig = appConfig.formConfig?.fields.find(f => f.id === fieldId);
+      const originalData = fieldConfig?.originalData || {};
+      const controlType = Object.keys(originalData).find(key => 
+        ['file', 'file-list'].includes(key)
+      );
 
       // Update the submittedInputs state
       setSubmittedInputs(prevInputs => {
           if (!prevInputs || !prevInputs[fieldId]) return prevInputs; // No state or field not found
 
-          const fieldInputData = prevInputs[fieldId];
-          // Check if the input for this field matches the file being removed
-          // This logic depends heavily on how you store file info in inputs (single object vs array)
-          if (typeof fieldInputData === 'object' && fieldInputData?.upload_file_id === fileIdToRemove) {
-              uploadFileIdToRemove = fieldInputData.upload_file_id; // Store the ID for filtering files array
+          // 处理不同类型的文件字段
+          if (controlType === 'file-list') {
+            // 对于file-list类型，移除数组中的特定文件
+            if (Array.isArray(prevInputs[fieldId])) {
+              const updatedFiles = prevInputs[fieldId].filter((fileInput: any) => 
+                fileInput.upload_file_id !== fileIdToRemove
+              );
+              
               const newInputs = { ...prevInputs };
-              delete newInputs[fieldId]; // Remove the input entry for this field
-              console.log(`FormChatAppDetail: Auto-removing input for field '${fieldId}'`);
+              if (updatedFiles.length > 0) {
+                newInputs[fieldId] = updatedFiles;
+              } else {
+                delete newInputs[fieldId]; // 如果没有文件了，则删除整个条目
+              }
               return newInputs;
+            }
+          } else {
+            // 对于单文件类型，检查是否匹配然后删除整个条目
+            const fieldInputData = prevInputs[fieldId];
+            if (typeof fieldInputData === 'object' && fieldInputData?.upload_file_id === fileIdToRemove) {
+                uploadFileIdToRemove = fieldInputData.upload_file_id; // Store the ID for filtering files array
+                const newInputs = { ...prevInputs };
+                delete newInputs[fieldId]; // Remove the input entry for this field
+                console.log(`FormChatAppDetail: Auto-removing input for field '${fieldId}'`);
+                return newInputs;
+            }
           }
-          // Add logic here if fieldInputData is an array of files
 
           return prevInputs; // No change if file doesn't match
       });
 
-      // Update the submittedFiles state using the uploadFileId found above
-      // We need the *actual* uploadFileId, not just the tempId from the UI component
-      // This requires that fileIdToRemove passed from DynamicForm IS the uploadFileId or we find it first.
-      // Let's *assume* fileIdToRemove is the uploadFileId for now.
-      // A more robust solution might involve DynamicForm passing back the full UploadedFile object on remove.
-      if (fileIdToRemove) { // If we assume fileIdToRemove is the upload_file_id
+      // Update the submittedFiles state
+      if (fileIdToRemove) {
          setSubmittedFiles(prevFiles => {
              const updatedFiles = prevFiles.filter(f => f.upload_file_id !== fileIdToRemove);
              if (updatedFiles.length !== prevFiles.length) {
@@ -677,21 +732,21 @@ export function FormChatAppDetail({ appConfig, className }: FormChatAppDetailPro
         <div className="flex flex-1 min-h-0">
           {/* 左侧表单区域 */}
           <div className="w-1/3 p-6 border-r border-gray-200 dark:border-[#1e293b] overflow-y-auto flex-shrink-0">
-            <div className="mb-6">
-              {appConfig.formConfig && (
+            {appConfig.formConfig && (
+              <div className="space-y-6">
+                {/* 表单组件 */}
                 <DynamicForm
                   fields={appConfig.formConfig.fields}
-                  submitButtonText={appConfig.formConfig.submitButtonText}
-                  resetButtonText={appConfig.formConfig.resetButtonText}
+                  submitButtonText={appConfig.formConfig.submitButtonText || "提交表单"}
+                  resetButtonText={appConfig.formConfig.resetButtonText || "重置"}
                   onSubmit={handleFormSubmit}
                   onReset={handleFormReset}
                   isSubmitting={isFormSubmitting}
                   onFileUpload={handleFileUploadForForm}
                   onRemoveFile={handleRemoveFileForForm}
-                  hideSubmitButton={appConfig.type === AppType.CHAT}
                 />
-              )}
-            </div>
+              </div>
+            )}
           </div>
 
           {/* 右侧聊天区域 */}
@@ -743,7 +798,7 @@ export function FormChatAppDetail({ appConfig, className }: FormChatAppDetailPro
 
             {/* 输入区域 - 添加背景阴影以区分 */}
             <div className="bg-gray-50 dark:bg-[#0c1525] shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] dark:shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.3)] flex-shrink-0">
-              {mounted && (
+              {mounted && appConfig.type === AppType.CHAT && (
                 <SimpleChatInput
                   onSendMessage={handleSendMessage}
                   isLoading={isLoading}

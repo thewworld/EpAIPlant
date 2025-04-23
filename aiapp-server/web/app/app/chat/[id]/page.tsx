@@ -39,26 +39,71 @@ export default function ChatAppPage() {
         let formConfig: { fields: FormField[]; submitButtonText: string; resetButtonText: string; } | undefined = undefined
         if (data.formConfig && data.formConfig.trim() !== "") {
           try {
-            const parsedFields = JSON.parse(data.formConfig)
+            const parsedData = JSON.parse(data.formConfig)
             
-            // 确保parsedFields是数组
-            if (Array.isArray(parsedFields)) {
-              // 检查每个字段是否有必要的属性
-              const fields: FormField[] = parsedFields.map((field: any) => {
-                // 处理文件类型
-                const fieldType = field.type === "file" ? FieldType.FILE : field.type || "text"
+            // 确保parsedData是数组
+            if (Array.isArray(parsedData)) {
+              // 处理新的表单格式：包含嵌套的控件类型对象
+              const fields: FormField[] = parsedData.map((field: any) => {
+                // 检查是否为新格式：对象的键是控件类型
+                const controlKeys = Object.keys(field);
+                const validControlType = controlKeys.find(key => 
+                  ['text-input', 'paragraph', 'select', 'number', 'file', 'file-list'].includes(key)
+                );
+                
+                let fieldData: any = field;
+                let fieldType: FieldType = FieldType.TEXT; // 默认类型
+                
+                if (validControlType) {
+                  // 新格式：从类型键获取字段数据
+                  fieldData = field[validControlType];
+                  
+                  // 根据控件类型映射到FieldType
+                  switch(validControlType) {
+                    case 'text-input':
+                      fieldType = FieldType.TEXT;
+                      break;
+                    case 'paragraph':
+                      fieldType = FieldType.TEXTAREA;
+                      break;
+                    case 'select':
+                      fieldType = FieldType.SELECT;
+                      break;
+                    case 'file':
+                    case 'file-list':
+                      fieldType = FieldType.FILE;
+                      break;
+                    case 'number':
+                      fieldType = FieldType.TEXT; // 使用TEXT类型但设置输入类型为number
+                      break;
+                    default:
+                      fieldType = FieldType.TEXT;
+                  }
+                } else {
+                  // 旧格式：直接使用字段的type属性
+                  fieldType = field.type === "file" ? FieldType.FILE : (field.type || "text") as FieldType;
+                }
                 
                 return {
-                  id: field.name || `field_${Math.random().toString(36).slice(2, 9)}`,
+                  id: fieldData.variable || fieldData.name || `field_${Math.random().toString(36).slice(2, 9)}`,
                   type: fieldType,
-                  label: field.label || "字段",
-                  placeholder: field.placeholder || "",
-                  required: !!field.required,
-                  defaultValue: field.defaultValue !== undefined ? field.defaultValue : "",
-                  options: Array.isArray(field.options) ? field.options : [],
-                  accept: field.accept || "",
-                  tip: field.tip || "",
-                  ...field
+                  label: fieldData.label || "字段",
+                  placeholder: fieldData.placeholder || "",
+                  required: !!fieldData.required,
+                  defaultValue: fieldData.defaultValue !== undefined ? fieldData.defaultValue : "",
+                  options: Array.isArray(fieldData.options) ? fieldData.options.map((opt: any) => {
+                    // 处理options可能是简单字符串数组的情况
+                    if (typeof opt === 'string' || typeof opt === 'number') {
+                      return { label: String(opt), value: opt };
+                    }
+                    return opt;
+                  }) : [],
+                  min: fieldData.min,
+                  max: fieldData.max_length || fieldData.max,
+                  accept: fieldData.allowed_file_extensions ? fieldData.allowed_file_extensions.join(',') : (fieldData.accept || ""),
+                  tip: fieldData.tip || "",
+                  // 保留原始的字段数据，可能在处理特殊控件时有用
+                  originalData: field
                 }
               })
               

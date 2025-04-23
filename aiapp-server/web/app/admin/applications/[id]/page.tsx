@@ -519,8 +519,9 @@ export default function ApplicationDetailPage() {
         onClose={() => setShowDeleteConfirm(false)}
         onConfirm={handleDeleteConfirm}
         title="删除应用"
-        description="确定要删除这个应用吗？此操作不可逆。"
+        description="确定要删除这个应用吗？此操作不可逆，删除后该应用将无法访问。"
         isLoading={isDeleting}
+        itemName={appData?.name}
       />
 
       {/* 错误提示 */}

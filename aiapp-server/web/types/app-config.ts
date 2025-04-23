@@ -35,6 +35,7 @@ export interface FormField {
   helperText?: string // 帮助文本
   accept?: string // 文件类型限制（用于文件上传）
   tip?: string // 提示信息
+  originalData?: any // 原始字段数据，用于保存特殊控件属性
 }
 
 // 应用介绍消息

@@ -106,6 +106,7 @@ export default function ApplicationsPage() {
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: "asc" | "desc" } | null>(null)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [appToDelete, setAppToDelete] = useState<number | null>(null)
+  const [appToDeleteName, setAppToDeleteName] = useState<string>("")
   
   // 获取应用列表
   useEffect(() => {
@@ -232,8 +233,10 @@ export default function ApplicationsPage() {
 
   // 处理删除确认
   const handleDeleteConfirm = (id: number) => {
-    setAppToDelete(id)
-    setShowDeleteConfirm(true)
+    const appToDelete = applications.find(app => app.id === id);
+    setAppToDelete(id);
+    setAppToDeleteName(appToDelete?.name || `应用 ID: ${id}`);
+    setShowDeleteConfirm(true);
   }
 
   // 执行删除
@@ -254,6 +257,7 @@ export default function ApplicationsPage() {
       
       setShowDeleteConfirm(false);
       setAppToDelete(null);
+      setAppToDeleteName("");
     } catch (error) {
       console.error('删除应用失败:', error);
       alert(`删除应用失败: ${error instanceof Error ? error.message : String(error)}`);
@@ -474,6 +478,7 @@ export default function ApplicationsPage() {
         onConfirm={executeDelete}
         title="删除应用"
         description="您确定要删除这个应用吗？此操作无法撤销，应用的所有数据将被永久删除。"
+        itemName={appToDeleteName}
       />
     </div>
   )

@@ -301,6 +301,20 @@ export function DynamicForm({
         )
 
       case FieldType.FILE:
+        // 获取文件字段的特殊属性
+        const isFileList = field.originalData && Object.keys(field.originalData).includes('file-list');
+        const fileConfig = field.originalData 
+          ? (field.originalData.file || field.originalData['file-list'] || {})
+          : {};
+        const allowedFileTypes = fileConfig.allowed_file_types || [];
+        const allowedFileExtensions = fileConfig.allowed_file_extensions || [];
+        const fileTypeText = allowedFileTypes.length > 0 
+          ? `文件类型: ${allowedFileTypes.join(', ')}` 
+          : '';
+        const fileExtText = allowedFileExtensions.length > 0 
+          ? `文件扩展名: ${allowedFileExtensions.join(', ')}` 
+          : '';
+        
         return (
           <div className="space-y-2" key={id}>
             <Label htmlFor={id}>
@@ -324,7 +338,7 @@ export function DynamicForm({
                     delete fileInputRefs.current[id]
                   }
                 }}
-                multiple
+                multiple={isFileList}
               />
               
               <Button
@@ -335,10 +349,18 @@ export function DynamicForm({
                 disabled={isSubmitting}
               >
                 <Paperclip className="mr-2 h-4 w-4" />
-                选择文件
+                {isFileList ? "选择多个文件" : "选择文件"}
               </Button>
               
               {placeholder && <p className="text-sm text-gray-500 dark:text-gray-400">{placeholder}</p>}
+              
+              {/* 显示文件类型和扩展名限制 */}
+              {(fileTypeText || fileExtText) && (
+                <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                  {fileTypeText && <div>{fileTypeText}</div>}
+                  {fileExtText && <div>{fileExtText}</div>}
+                </div>
+              )}
             </div>
             
             {/* 已上传文件预览 */}
@@ -399,12 +421,12 @@ export function DynamicForm({
     <form onSubmit={handleSubmit} className={className}>
       <div className="space-y-4">{fields.map(renderField)}</div>
 
-      <div className="flex gap-2 mt-6">
+      <div className="flex gap-2 mt-6 justify-start">
         <Button
           type="button"
           variant="outline"
           onClick={handleReset}
-          className="border-gray-200 text-gray-700 hover:text-gray-900 hover:bg-gray-100 dark:border-[#334155] dark:text-gray-300 dark:hover:text-white dark:hover:bg-[#1e293b]"
+          className="w-24 border-gray-200 text-gray-700 hover:text-gray-900 hover:bg-gray-100 dark:border-[#334155] dark:text-gray-300 dark:hover:text-white dark:hover:bg-[#1e293b]"
         >
           {resetButtonText}
         </Button>
@@ -412,9 +434,16 @@ export function DynamicForm({
           <Button
             type="submit"
             disabled={isSubmitting}
-            className="bg-blue-600 hover:bg-blue-700 dark:bg-gradient-to-r dark:from-blue-600 dark:to-purple-600 dark:hover:from-blue-700 dark:hover:to-purple-700 text-white"
+            className="w-24 bg-blue-600 hover:bg-blue-700 dark:bg-gradient-to-r dark:from-blue-600 dark:to-purple-600 dark:hover:from-blue-700 dark:hover:to-purple-700 text-white"
           >
-            {isSubmitting ? "处理中..." : submitButtonText}
+            {isSubmitting ? (
+              <>
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                处理中...
+              </>
+            ) : (
+              submitButtonText
+            )}
           </Button>
         )}
       </div>
