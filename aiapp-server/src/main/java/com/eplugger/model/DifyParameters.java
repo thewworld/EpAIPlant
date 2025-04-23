@@ -70,21 +70,27 @@ public class DifyParameters {
      * 表单控件类型枚举
      */
     public enum FormControlType {
+        // 文本类型
         @JsonProperty("text-input")
         TEXT_INPUT("text-input"),
         
+        // 段落类型
         @JsonProperty("paragraph")
         PARAGRAPH("paragraph"),
         
+        // 下拉选择类型
         @JsonProperty("select")
         SELECT("select"),
-        
+
+        // 数字类型
         @JsonProperty("number")
         NUMBER("number"),
         
+        // 文件上传类型
         @JsonProperty("file")
         FILE_INPUT("file"),
         
+        // 文件列表类型
         @JsonProperty("file-list")
         FILE_LIST("file-list");
         

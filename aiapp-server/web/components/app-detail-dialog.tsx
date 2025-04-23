@@ -110,13 +110,13 @@ export function AppDetailDialog({ app, isOpen, onClose, onAppClick, relatedApps 
       
       // 如果是SVG文本内容，则进行URL编码
       if (app.logo.startsWith('<svg') || app.logo.startsWith('<?xml')) {
-        try {
-          return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(app.logo)}`
-        } catch (e) {
-          console.error('Logo编码错误:', e);
-          // 编码失败时使用默认图标
-          return '/icons/app-default.svg';
-        }
+      try {
+        return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(app.logo)}`
+      } catch (e) {
+        console.error('Logo编码错误:', e);
+        // 编码失败时使用默认图标
+        return '/icons/app-default.svg';
+      }
       }
       
       // 如果无法识别格式但仍然是base64，尝试作为通用图片处理
@@ -467,13 +467,13 @@ export function AppDetailDialog({ app, isOpen, onClose, onAppClick, relatedApps 
                       {app.category || "应用"}
                     </div>
                     {getTags().slice(0, 2).map((tag: string) => (
-                      <div
-                        key={tag}
-                        className="flex items-center text-xs bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded text-gray-700 dark:text-gray-300"
-                      >
-                        {tag}
-                      </div>
-                    ))}
+                        <div
+                          key={tag}
+                          className="flex items-center text-xs bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded text-gray-700 dark:text-gray-300"
+                        >
+                          {tag}
+                        </div>
+                      ))}
                   </div>
                 </div>
               </div>

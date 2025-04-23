@@ -289,6 +289,27 @@ const AI_GENERATED_TEMPLATES = {
   }
 };
 
+// 定义控件类型接口
+interface FormControlData {
+  type?: string;
+  label?: string;
+  title?: string;
+  name?: string;
+  required?: boolean;
+  variable?: string;
+  field_name?: string;
+  default?: any;
+  description?: string;
+  tip?: string;
+  placeholder?: string;
+  maxLength?: number;
+  max_length?: number;
+  options?: any[];
+  allowed_file_types?: string[];
+  allowed_file_extensions?: string[];
+  [key: string]: any; // 允许其他属性
+}
+
 interface ApplicationFormProps {
   mode: 'create' | 'edit'
   id?: string
@@ -299,190 +320,406 @@ interface ApplicationFormProps {
   isSubmitting?: boolean
 }
 
-// 表单模板
-const formTemplate = `[
-  {
-    "name": "username",
-    "type": "text",
-    "label": "用户名",
-    "required": true,
-    "placeholder": "请输入用户名"
-  },
-  {
-    "name": "gender",
-    "type": "select",
-    "label": "性别",
-    "required": true,
-    "options": [
-      {
-        "label": "男",
-        "value": "male"
-      },
-      {
-        "label": "女",
-        "value": "female"
-      }
-    ]
-  },
-  {
-    "name": "age",
-    "type": "number",
-    "label": "年龄",
-    "required": false,
-    "min": 0,
-    "max": 120
-  },
-  {
-    "name": "resume",
-    "type": "file",
-    "label": "简历",
-    "required": false,
-    "accept": ".pdf,.doc,.docx",
-    "tip": "请上传PDF或Word格式文件"
-  }
-]`
-
-// 表单预览组件
-function FormPreview({ formConfig }: { formConfig: string }) {
-  const [formFields, setFormFields] = useState<any[]>([])
+const FormPreview = ({ formConfig, showDetailsInfo = true }: { formConfig: string, showDetailsInfo?: boolean }) => {
+  const [formControls, setFormControls] = useState<FormControlData[]>([])
   const [error, setError] = useState<string | null>(null)
-  const [formValues, setFormValues] = useState<Record<string, any>>({})
+  const [formStructure, setFormStructure] = useState<'standard' | 'dify' | 'unknown'>('unknown')
+
+  // 控件类型映射表，根据Java中的FormControlType枚举值定义
+  const controlTypeExplanations: Record<string, string> = {
+    'text-input': '文本输入控件',
+    'paragraph': '段落文本控件',
+    'select': '下拉选择控件',
+    'number': '数字输入控件',
+    'file': '文件上传控件',
+    'file-list': '文件列表控件'
+  }
+
+  // 规范化控件数据的函数，处理不同的控件数据格式
+  const normalizeControl = (control: Record<string, any>): FormControlData => {
+    // 检查是否是特殊格式：对象的键是控件类型
+    const controlKeys = Object.keys(control);
+    const validTypeKey = controlKeys.find(key => Object.keys(controlTypeExplanations).includes(key));
+    
+    if (validTypeKey) {
+      // 特殊格式：{text-input: {properties}}
+      const properties = control[validTypeKey] as Record<string, any>;
+      return {
+        ...properties,
+        type: validTypeKey // 确保type属性存在且为正确的类型
+      };
+    }
+    
+    // 标准格式
+    return control as FormControlData;
+  };
 
   useEffect(() => {
-    try {
-      if (!formConfig || formConfig.trim() === "") {
-        setFormFields([])
-        setError("表单配置为空")
+    if (!formConfig || formConfig.trim() === '') {
+      setFormControls([])
+      setError(null)
+      setFormStructure('unknown')
         return
       }
       
-      const parsedConfig = JSON.parse(formConfig)
-      const fields = Array.isArray(parsedConfig) ? parsedConfig : []
-      setFormFields(fields)
+    try {
+      let parsedConfig: any = JSON.parse(formConfig)
+      console.log('表单配置解析结果:', parsedConfig)
       
-      // 初始化表单值
-      const initialValues: Record<string, any> = {}
-      fields.forEach(field => {
-        initialValues[field.name] = field.defaultValue || ''
-      })
-      setFormValues(initialValues)
-      
+      // 检查并处理各种可能的表单格式
+      if (Array.isArray(parsedConfig)) {
+        // 直接是控件数组的情况，需要规范化每个控件
+        setFormControls(parsedConfig.map((control: Record<string, any>) => normalizeControl(control)))
+        setFormStructure('standard')
+        setError(null)
+      } 
+      else if (parsedConfig && typeof parsedConfig === 'object' && Array.isArray(parsedConfig.userInputForm)) {
+        // Dify格式的表单
+        setFormControls(parsedConfig.userInputForm.map((control: Record<string, any>) => normalizeControl(control)))
+        setFormStructure('dify')
+        setError(null)
+      }
+      else if (parsedConfig && typeof parsedConfig === 'object' && parsedConfig.formConfig) {
+        // 嵌套的formConfig
+        try {
+          const nestedConfig = typeof parsedConfig.formConfig === 'string'
+            ? JSON.parse(parsedConfig.formConfig)
+            : parsedConfig.formConfig
+          
+          if (Array.isArray(nestedConfig)) {
+            setFormControls(nestedConfig.map((control: Record<string, any>) => normalizeControl(control)))
+            setFormStructure('standard')
       setError(null)
+          } 
+          else if (nestedConfig && typeof nestedConfig === 'object' && Array.isArray(nestedConfig.userInputForm)) {
+            setFormControls(nestedConfig.userInputForm.map((control: Record<string, any>) => normalizeControl(control)))
+            setFormStructure('dify')
+            setError(null)
+          }
+          else {
+            setFormControls([])
+            setError('嵌套formConfig格式不支持，预期为数组或Dify格式')
+            setFormStructure('unknown')
+          }
     } catch (err) {
-      setError("表单配置格式无效")
-      setFormFields([])
+          setFormControls([])
+          setError(`嵌套formConfig解析失败: ${err instanceof Error ? err.message : String(err)}`)
+          setFormStructure('unknown')
+        }
+      }
+      else if (parsedConfig && typeof parsedConfig === 'object') {
+        // 单个控件对象的情况
+        const normalizedControl = normalizeControl(parsedConfig as Record<string, any>);
+        if (normalizedControl.type) {
+          setFormControls([normalizedControl])
+          setFormStructure('standard')
+          setError(null)
+        } else {
+          setFormControls([])
+          setError('不支持的表单控件格式，无法识别控件类型')
+          setFormStructure('unknown')
+        }
+      }
+      else {
+        setFormControls([])
+        setError('不支持的表单配置格式，无法预览')
+        setFormStructure('unknown')
+      }
+    } catch (err) {
+      setFormControls([])
+      setError(`表单配置解析失败: ${err instanceof Error ? err.message : String(err)}`)
+      setFormStructure('unknown')
     }
   }, [formConfig])
 
-  // 处理输入变化
-  const handleInputChange = (name: string, value: any) => {
-    setFormValues(prev => ({
-      ...prev,
-      [name]: value
-    }))
-  }
-
-  // 处理表单提交
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    alert('表单提交示例：\n' + JSON.stringify(formValues, null, 2))
-  }
-
   if (error) {
     return (
-      <div className="p-4 bg-gray-50 rounded-md">
-        <Alert variant="destructive">
-          <AlertTitle>预览错误</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
+      <div className="flex flex-col gap-2 p-4 border border-red-200 bg-red-50 rounded-md">
+        <div className="text-red-500 font-medium">表单预览错误</div>
+        <div className="text-sm text-red-600">{error}</div>
       </div>
     )
   }
 
-  if (formFields.length === 0) {
+  if (formControls.length === 0) {
     return (
-      <div className="p-4 bg-gray-50 rounded-md text-center text-gray-500">
-        无表单字段或配置为空
+      <div className="flex flex-col gap-2 p-4 border border-gray-200 bg-gray-50 rounded-md">
+        <div className="text-gray-500 font-medium">表单预览</div>
+        <div className="text-sm text-gray-600">未配置表单控件或配置为空</div>
       </div>
     )
   }
+
+  // 渲染控件函数
+  const renderControl = (control: FormControlData, index: number) => {
+    // 检查控件类型是否有效
+    const type = control.type || '';
+    const isValidType = Object.keys(controlTypeExplanations).includes(type);
+    
+    // 提取控件的基本信息
+    const label = control.label || control.title || control.name || `控件 ${index + 1}`;
+    const required = control.required ? true : false;
+    const variable = control.variable || control.name || control.field_name || '';
+    const defaultValue = control.default || '';
+    const description = control.description || control.tip || '';
+    const placeholder = control.placeholder || '';
+    const maxLength = control.maxLength || control.max_length;
+    const options = control.options || [];
+    
+    // 文件控件特有属性
+    const allowedFileTypes = control.allowed_file_types || [];
+    const allowedFileExtensions = control.allowed_file_extensions || [];
+    
+    // 获取控件类型的解释说明
+    const typeExplanation = controlTypeExplanations[type] || '未知控件类型';
 
   return (
-    <form onSubmit={handleSubmit} className="p-4 bg-gray-50 rounded-md space-y-4">
-      <h3 className="font-medium text-gray-800 mb-4">表单预览</h3>
-      
-      {formFields.map((field, index) => (
-        <div key={index} className="space-y-2">
-          <Label htmlFor={`preview-${field.name}`}>
-            {field.label}
-            {field.required && <span className="text-red-500 ml-1">*</span>}
-          </Label>
-          
-          {field.type === 'text' && (
-            <Input 
-              id={`preview-${field.name}`}
-              placeholder={field.placeholder || ''}
-              value={formValues[field.name] || ''}
-              onChange={(e) => handleInputChange(field.name, e.target.value)}
-            />
-          )}
-          
-          {field.type === 'number' && (
-            <Input 
-              id={`preview-${field.name}`}
-              type="number"
-              placeholder={field.placeholder || ''}
-              min={field.min}
-              max={field.max}
-              value={formValues[field.name] || ''}
-              onChange={(e) => handleInputChange(field.name, e.target.value)}
-            />
-          )}
-          
-          {field.type === 'select' && (
-            <Select 
-              value={formValues[field.name] || ''}
-              onValueChange={(value) => handleInputChange(field.name, value)}
-            >
-              <SelectTrigger id={`preview-${field.name}`}>
-                <SelectValue placeholder={field.placeholder || '请选择'} />
-              </SelectTrigger>
-              <SelectContent>
-                {field.options?.map((option: any, optIndex: number) => (
-                  <SelectItem key={optIndex} value={option.value}>{option.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-          
-          {field.type === 'file' && (
-            <div>
-              <Input 
-                id={`preview-${field.name}`}
-                type="file"
-                accept={field.accept}
-                onChange={(e) => {
-                  const file = e.target.files?.[0]
-                  if (file) {
-                    handleInputChange(field.name, file.name) // 只存储文件名用于展示
-                  }
-                }}
-              />
-              {field.tip && <p className="text-xs text-gray-500 mt-1">{field.tip}</p>}
+      <div key={index} className="border border-gray-100 p-3 rounded-md bg-gray-50 mb-4">
+        <div className="flex items-start justify-between mb-2">
+          <div className="font-medium flex items-center">
+            <span>{label}</span>
+            {required && <span className="text-red-500 ml-1">*</span>}
+          </div>
+          {showDetailsInfo && (
+            <div className="flex items-center">
+              {variable && (
+                <div className="text-xs px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded mr-2">
+                  ID: {variable}
+                </div>
+              )}
+              <div className={`text-xs px-1.5 py-0.5 ${isValidType ? 'bg-gray-200 text-gray-700' : 'bg-red-100 text-red-700'} rounded flex items-center`}>
+                <span>{type}</span>
+                <div className="ml-1 text-xs text-gray-500">({typeExplanation})</div>
+              </div>
             </div>
           )}
         </div>
-      ))}
-      
-      <div className="flex space-x-2 pt-4">
-        <Button type="submit" className="w-full">提交</Button>
+        
+        {/* 渲染不同类型的控件预览 */}
+        {type === 'text-input' && (
+          <input 
+            type="text" 
+            placeholder={placeholder || '请输入文本'} 
+            className="w-full p-2 border border-gray-300 rounded-md bg-white"
+            defaultValue={defaultValue}
+            maxLength={maxLength}
+          />
+        )}
+        
+        {type === 'paragraph' && (
+          <textarea 
+            placeholder={placeholder || '请输入段落文本'} 
+            className="w-full p-2 border border-gray-300 rounded-md bg-white"
+            rows={3}
+            defaultValue={defaultValue}
+            maxLength={maxLength}
+          />
+        )}
+        
+        {type === 'select' && (
+          <select className="w-full p-2 border border-gray-300 rounded-md bg-white">
+            <option value="">{placeholder || '请选择选项'}</option>
+            {options.map((opt: any, i: number) => (
+              <option key={i} value={typeof opt === 'object' ? opt.value : opt}>
+                {typeof opt === 'object' ? opt.label || opt.value : opt}
+              </option>
+            ))}
+          </select>
+        )}
+        
+        {type === 'number' && (
+          <div className="w-full">
+            <input 
+              type="number"
+              placeholder={placeholder || '请输入数字'} 
+              className="w-full p-2 border border-gray-300 rounded-md bg-white"
+              defaultValue={defaultValue}
+              min={0}  // 默认最小值为0
+              step={1} // 默认步长为1
+              // 使用onInput而不是onChange来确保实时响应
+              onInput={(e) => {
+                const target = e.target as HTMLInputElement;
+                if (maxLength && target.value.length > maxLength) {
+                  target.value = target.value.slice(0, maxLength);
+                }
+              }}
+            />
+            {maxLength && (
+              <div className="text-xs text-gray-500 mt-1">
+                最大允许值: {maxLength}
+              </div>
+            )}
+          </div>
+        )}
+        
+        {type === 'file' && (
+          <div className="w-full">
+            <label className="block w-full cursor-pointer">
+              <div className="p-4 border border-dashed border-gray-300 rounded-md bg-white flex flex-col items-center justify-center hover:bg-gray-50 transition-colors">
+                <input
+                  type="file"
+                  className="hidden"
+                  onChange={(e) => {
+                    // 显示选择的文件名
+                    const fileInput = e.target as HTMLInputElement;
+                    const fileName = fileInput.files && fileInput.files[0] ? fileInput.files[0].name : "";
+                    
+                    if (fileName) {
+                      // 找到并更新最近的文件名显示元素
+                      const fileNameElement = e.currentTarget.parentElement?.querySelector('.file-name');
+                      if (fileNameElement) {
+                        fileNameElement.textContent = fileName;
+                        fileNameElement.classList.remove('hidden');
+                      }
+                    }
+                  }}
+                  // 根据允许的文件类型设置accept属性
+                  accept={allowedFileExtensions.length > 0 ? allowedFileExtensions.join(',') : undefined}
+                />
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-gray-400 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                </svg>
+                <span className="text-gray-500">点击或拖拽文件上传</span>
+                <span className="file-name hidden mt-2 text-sm text-blue-600 font-medium"></span>
+              </div>
+            </label>
+            
+            {allowedFileTypes.length > 0 && (
+              <div className="mt-1 flex flex-wrap gap-1">
+                {allowedFileTypes.map((fileType: string, i: number) => (
+                  <span key={i} className="text-xs px-2 py-0.5 bg-blue-50 text-blue-700 rounded">
+                    {fileType}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+        
+        {type === 'file-list' && (
+          <div className="w-full">
+            <label className="block w-full cursor-pointer">
+              <div className="p-4 border border-dashed border-gray-300 rounded-md bg-white flex flex-col items-center justify-center hover:bg-gray-50 transition-colors mb-2">
+                <input
+                type="file"
+                  className="hidden"
+                  multiple // 允许多文件上传
+                onChange={(e) => {
+                    // 显示选择的文件名
+                    const fileInput = e.target as HTMLInputElement;
+                    const fileList = fileInput.files;
+                    
+                    // 找到文件列表显示区域
+                    const fileListElement = e.currentTarget.parentElement?.parentElement?.querySelector('.file-list-container');
+                    if (fileListElement && fileList && fileList.length > 0) {
+                      // 清空现有内容
+                      fileListElement.innerHTML = '';
+                      
+                      // 添加每个文件
+                      Array.from(fileList).forEach(file => {
+                        const fileItem = document.createElement('div');
+                        fileItem.className = 'flex items-center justify-between p-2 border border-gray-200 rounded-md mb-1';
+                        fileItem.innerHTML = `
+                          <span class="text-sm truncate flex-1">${file.name}</span>
+                          <span class="text-xs text-gray-500 ml-2">${(file.size / 1024).toFixed(1)} KB</span>
+                        `;
+                        fileListElement.appendChild(fileItem);
+                      });
+
+                      // 显示文件列表容器
+                      fileListElement.classList.remove('hidden');
+                      
+                      // 隐藏占位文本
+                      const placeholderElement = e.currentTarget.parentElement?.parentElement?.querySelector('.file-list-placeholder');
+                      if (placeholderElement) {
+                        placeholderElement.classList.add('hidden');
+                      }
+                    }
+                  }}
+                  // 根据允许的文件类型设置accept属性
+                  accept={allowedFileExtensions.length > 0 ? allowedFileExtensions.join(',') : undefined}
+                />
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-gray-400 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                </svg>
+                <span className="text-gray-500">点击或拖拽上传多个文件</span>
+            </div>
+            </label>
+            <div className="p-2 border border-gray-200 rounded-md bg-gray-50">
+              <div className="file-list-placeholder text-sm text-gray-500">文件列表将在此显示</div>
+              <div className="file-list-container hidden"></div>
+        </div>
+            {allowedFileExtensions.length > 0 && (
+              <div className="mt-1 flex flex-wrap gap-1">
+                {allowedFileExtensions.map((ext: string, i: number) => (
+                  <span key={i} className="text-xs px-2 py-0.5 bg-green-50 text-green-700 rounded">
+                    {ext}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+        
+        {!isValidType && (
+          <div className="w-full p-2 border border-red-200 rounded-md bg-red-50 text-red-600 text-sm">
+            未知控件类型: {type}，仅支持: text-input, paragraph, select, number, file, file-list
       </div>
-    </form>
+        )}
+        
+        {description && (
+          <div className="mt-1 text-xs text-gray-500">{description}</div>
+        )}
+        
+        {/* 显示控件字段信息，根据showDetailsInfo属性决定是否显示 */}
+        {showDetailsInfo && (
+          <div className="mt-2 pt-2 border-t border-gray-100 text-xs text-gray-500">
+            <div className="grid grid-cols-2 gap-2">
+              {variable && (
+                <div>变量ID: <span className="font-mono">{variable}</span></div>
+              )}
+              {defaultValue && (
+                <div>默认值: <span className="font-mono">{typeof defaultValue === 'object' ? JSON.stringify(defaultValue) : defaultValue}</span></div>
+              )}
+              <div>是否必填: <span className="font-mono">{required ? '是' : '否'}</span></div>
+              {maxLength && (
+                <div>最大长度: <span className="font-mono">{maxLength}</span></div>
+              )}
+              {placeholder && (
+                <div>占位文本: <span className="font-mono">{placeholder}</span></div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <div className="flex flex-col gap-4 p-4 border border-gray-200 rounded-md">
+      {showDetailsInfo && (
+        <div className="flex items-center justify-between mb-4">
+          <div className="font-medium">表单预览</div>
+          {formStructure === 'dify' && (
+            <div className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded">Dify格式</div>
+          )}
+        </div>
+      )}
+      
+      <div className="space-y-4">
+        {formControls.map((control, index) => renderControl(control, index))}
+        {formControls.length === 0 && (
+          <div className="p-4 text-center text-gray-500 border border-dashed border-gray-300 rounded-md">
+            没有配置任何表单控件
+          </div>
+        )}
+      </div>
+    </div>
   )
 }
 
 // 将FormPreview组件使用memo包装
-const MemoizedFormPreview = React.memo(FormPreview)
+const MemoizedFormPreview = React.memo(FormPreview) as typeof FormPreview;
 
 export function ApplicationForm({ mode, id, initialData, isLoading = false, isUsingMockData = false, onSubmit, isSubmitting = false }: ApplicationFormProps) {
   const router = useRouter()
@@ -494,7 +731,6 @@ export function ApplicationForm({ mode, id, initialData, isLoading = false, isUs
   const [logoPreview, setLogoPreview] = useState<string | null>(initialData?.logo || null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [error, setError] = useState<string | null>(null)
-  const [templateDialogOpen, setTemplateDialogOpen] = useState(false)
   const [previewDialogOpen, setPreviewDialogOpen] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
   const [isSyncing, setIsSyncing] = useState(false)
@@ -578,16 +814,80 @@ export function ApplicationForm({ mode, id, initialData, isLoading = false, isUs
       })
     } else {
       try {
-        JSON.parse(value)
+        // 尝试解析JSON
+        const parsedValue = JSON.parse(value)
+        
+        // 验证JSON结构，检查是否符合表单格式要求
+        let isValidFormConfig = false
+        
+        // 检查是否为数组格式的表单配置
+        if (Array.isArray(parsedValue)) {
+          // 检查数组中的每一项是否包含必要的表单字段属性
+          isValidFormConfig = parsedValue.length === 0 || parsedValue.some(item => 
+            item && typeof item === 'object' && (
+              item.type || 
+              item.name || 
+              item.label
+            )
+          )
+        } 
+        // 检查是否为Dify格式的表单配置
+        else if (
+          parsedValue && 
+          typeof parsedValue === 'object' && 
+          Array.isArray(parsedValue.userInputForm)
+        ) {
+          isValidFormConfig = true
+        }
+        // 检查是否包含formConfig属性的嵌套结构
+        else if (
+          parsedValue && 
+          typeof parsedValue === 'object' && 
+          parsedValue.formConfig
+        ) {
+          try {
+            const nestedConfig = typeof parsedValue.formConfig === 'string'
+              ? JSON.parse(parsedValue.formConfig)
+              : parsedValue.formConfig
+              
+            if (Array.isArray(nestedConfig) || 
+                (nestedConfig && nestedConfig.userInputForm)) {
+              isValidFormConfig = true
+            }
+          } catch (nestedErr) {
+            console.warn("嵌套formConfig解析失败", nestedErr)
+          }
+        }
+        // 检查对象是否直接包含表单字段属性
+        else if (
+          parsedValue && 
+          typeof parsedValue === 'object' &&
+          (parsedValue.type || parsedValue.name || parsedValue.label)
+        ) {
+          isValidFormConfig = true
+        }
+        
+        // 验证JSON格式和结构
+        if (isValidFormConfig) {
         // 验证通过，清除formConfig的错误
         setErrors((prev) => {
           const newErrors = { ...prev }
           delete newErrors.formConfig
           return newErrors
         })
+        } else {
+          // JSON格式正确但结构不符合表单要求
+          setErrors((prev) => ({ 
+            ...prev, 
+            formConfig: "JSON格式正确，但不符合表单配置的结构要求" 
+          }))
+        }
       } catch (error) {
         // JSON格式无效
-        setErrors((prev) => ({ ...prev, formConfig: "无效的JSON格式" }))
+        setErrors((prev) => ({ 
+          ...prev, 
+          formConfig: `无效的JSON格式: ${error instanceof Error ? error.message : String(error)}` 
+        }))
       }
     }
   }, [])
@@ -647,15 +947,6 @@ export function ApplicationForm({ mode, id, initialData, isLoading = false, isUs
     }
     reader.readAsDataURL(file)
   }, [])
-
-  const loadTemplate = useCallback(() => {
-    try {
-      handleEditorChange(formTemplate)
-      setTemplateDialogOpen(false)
-    } catch (error) {
-      console.error("加载模板失败:", error)
-    }
-  }, [handleEditorChange, formTemplate])
 
   const validateForm = useCallback(() => {
     let isValid = true
@@ -1055,16 +1346,16 @@ export function ApplicationForm({ mode, id, initialData, isLoading = false, isUs
                   {(formData.tags || []).map((tag, index) => (
                     <Badge key={index} variant="secondary" className="text-xs flex items-center gap-1">
                       {tag}
-                      <button 
-                        type="button" 
+                    <button
+                      type="button"
                         onClick={() => handleRemoveTag(tag)}
                         className="text-gray-400 hover:text-gray-600"
-                      >
+                    >
                         <X className="h-3 w-3" />
-                      </button>
+                    </button>
                     </Badge>
                   ))}
-                </div>
+                  </div>
                 <div className="flex">
                   <Input
                     id="tagInput"
@@ -1074,15 +1365,15 @@ export function ApplicationForm({ mode, id, initialData, isLoading = false, isUs
                     placeholder="输入标签后按回车添加"
                     className="flex-grow"
                   />
-                  <Button 
-                    type="button" 
-                    variant="outline" 
-                    className="ml-2" 
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="ml-2"
                     onClick={handleAddTag}
                     disabled={!tagInput.trim()}
-                  >
+                        >
                     添加
-                  </Button>
+                        </Button>
                 </div>
                 <p className="text-xs text-gray-500">添加多个标签来分类您的应用</p>
               </div>
@@ -1222,50 +1513,18 @@ export function ApplicationForm({ mode, id, initialData, isLoading = false, isUs
                               预览表单
                             </Button>
                           </DialogTrigger>
-                          <DialogContent className="sm:max-w-[600px]">
+                          <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-hidden flex flex-col">
                             <DialogHeader>
                               <DialogTitle>表单预览</DialogTitle>
                               <DialogDescription>
-                                以下是当前表单配置的预览效果
+                                当前表单配置的实际效果展示
                               </DialogDescription>
                             </DialogHeader>
-                            <div className="py-4">
-                              <MemoizedFormPreview formConfig={formData.formConfig} />
+                            <div className="py-4 overflow-y-auto max-h-[calc(90vh-180px)] flex-grow">
+                              <MemoizedFormPreview formConfig={formData.formConfig} showDetailsInfo={false} />
                             </div>
-                            <div className="flex justify-end">
+                            <div className="flex justify-end pt-2 border-t mt-2">
                               <Button variant="outline" onClick={() => setPreviewDialogOpen(false)}>关闭</Button>
-                            </div>
-                          </DialogContent>
-                        </Dialog>
-                        
-                        <Dialog open={templateDialogOpen} onOpenChange={setTemplateDialogOpen}>
-                          <DialogTrigger asChild>
-                            <Button variant="outline" size="sm">
-                              <FileText className="h-4 w-4 mr-2" />
-                              加载模板
-                            </Button>
-                          </DialogTrigger>
-                          <DialogContent>
-                            <DialogHeader>
-                              <DialogTitle>表单配置模板</DialogTitle>
-                              <DialogDescription>
-                                使用此模板作为表单配置的起点。点击"使用模板"将覆盖当前配置。
-                              </DialogDescription>
-                            </DialogHeader>
-                            <div className="bg-gray-50 p-4 rounded-md">
-                              <pre className="text-xs overflow-auto max-h-[300px]">{formTemplate}</pre>
-                            </div>
-                            <div className="mt-4 space-y-2">
-                              <h4 className="font-medium">支持的表单项类型:</h4>
-                              <ul className="text-sm pl-5 list-disc space-y-1">
-                                {APP_CONFIG.formFieldTypes.map((type) => (
-                                  <li key={type.value}>{type.value}: {type.label}</li>
-                                ))}
-                              </ul>
-                            </div>
-                            <div className="flex justify-end space-x-2 mt-4">
-                              <Button variant="outline" onClick={() => setTemplateDialogOpen(false)}>取消</Button>
-                              <Button onClick={loadTemplate}>使用模板</Button>
                             </div>
                           </DialogContent>
                         </Dialog>
@@ -1276,32 +1535,6 @@ export function ApplicationForm({ mode, id, initialData, isLoading = false, isUs
                       {editorComponent}
                     </div>
                     {errors.formConfig && <p className="text-xs text-red-500">{errors.formConfig}</p>}
-                    
-                    <div className="mt-4 p-4 bg-blue-50 rounded-md border border-blue-200">
-                      <h4 className="font-medium text-blue-800 mb-2">表单配置帮助</h4>
-                      <p className="text-sm text-blue-700 mb-2">表单配置采用JSON格式的数组，每个数组项代表一个表单字段。</p>
-                      <div className="space-y-2">
-                        <h5 className="text-sm font-medium text-blue-800">支持的字段类型：</h5>
-                        <ul className="text-sm text-blue-700 pl-5 list-disc space-y-1">
-                          {APP_CONFIG.formFieldTypes.map((type) => (
-                            <li key={type.value}>
-                              <span className="font-mono bg-blue-100 px-1 rounded">{type.value}</span>: {type.label}
-                            </li>
-                          ))}
-                        </ul>
-                        <h5 className="text-sm font-medium text-blue-800">常用属性：</h5>
-                        <ul className="text-sm text-blue-700 pl-5 list-disc space-y-1">
-                          {APP_CONFIG.fieldAttributes.map((attr) => (
-                            <li key={attr.name}>
-                              <span className="font-mono bg-blue-100 px-1 rounded">{attr.name}</span>: {attr.description}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                      <div className="mt-3 text-sm text-blue-700">
-                        <p>可以点击"加载模板"按钮查看完整示例，或直接使用模板快速开始。</p>
-                      </div>
-                    </div>
                   </div>
                 </TabsContent>
               </Tabs>

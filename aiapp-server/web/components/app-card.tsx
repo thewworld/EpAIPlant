@@ -133,13 +133,13 @@ export function AppCard({ app, onAppClick, onAppDetails }: AppCardProps) {
       
       // 如果是SVG文本内容，则进行URL编码
       if (app.logo.startsWith('<svg') || app.logo.startsWith('<?xml')) {
-        try {
-          return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(app.logo)}`
-        } catch (e) {
-          console.error('Logo编码错误:', e);
-          // 编码失败时使用默认图标
-          return '/icons/app-default.svg';
-        }
+      try {
+        return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(app.logo)}`
+      } catch (e) {
+        console.error('Logo编码错误:', e);
+        // 编码失败时使用默认图标
+        return '/icons/app-default.svg';
+      }
       }
       
       // 如果无法识别格式但仍然是base64，尝试作为通用图片处理
