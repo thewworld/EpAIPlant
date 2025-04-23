@@ -64,6 +64,7 @@ export function FormChatAppDetail({ appConfig, className }: FormChatAppDetailPro
   const { toast } = useToast()
   const [mounted, setMounted] = useState(false)
   const [submittedInputs, setSubmittedInputs] = useState<Record<string, any> | null>(null);
+  const [currentFormInputs, setCurrentFormInputs] = useState<Record<string, any>>({});  // 新增：当前表单数据
   const [submittedFiles, setSubmittedFiles] = useState<any[]>([]); // Initialize as empty array
   const [chatUploadedFiles, setChatUploadedFiles] = useState<UploadedFile[]>([]);
 
@@ -77,6 +78,15 @@ export function FormChatAppDetail({ appConfig, className }: FormChatAppDetailPro
     // 确保组件完全挂载后再显示输入框
     setMounted(true)
   }, [])
+
+  // 处理表单字段变化 - 添加字段实时监听功能
+  const handleFormFieldChange = (fieldData: Record<string, any>) => {
+    // 实时更新当前表单数据
+    setCurrentFormInputs(prev => ({
+      ...prev,
+      ...fieldData
+    }));
+  };
 
   // 处理发送消息 (聊天输入框)
   const handleSendMessage = async (content: string) => {
@@ -117,12 +127,18 @@ export function FormChatAppDetail({ appConfig, className }: FormChatAppDetailPro
     setMessages(prev => [...prev, thinkingMessage])
 
     try {
+      // 组合使用已提交的表单参数和当前表单状态
+      const combinedInputs = {
+        ...(submittedInputs || {}),
+        ...currentFormInputs
+      };
+      
       // 构建完整的请求参数，包含表单参数和聊天输入框参数
       const apiParams: DifyApiParams = {
         query: content,
         user: "test_user",
         conversation_id: "",
-        inputs: submittedInputs || {}, // 使用已提交的表单参数
+        inputs: combinedInputs, // 使用合并后的表单参数
         files: chatFilesToSend, // 聊天输入框上传的文件
         response_mode: appConfig.chatModel === "sse" ? "streaming" : "blocking",
         auto_generate_name: true,
@@ -197,7 +213,7 @@ export function FormChatAppDetail({ appConfig, className }: FormChatAppDetailPro
     setIsLoading(true)
 
     const userContentParts: string[] = ["提交表单:"]
-    const currentFormInputs: Record<string, any> = {}
+    const processedFormInputs: Record<string, any> = {}
     let thinkingMessageId: string | undefined
 
     try {
@@ -221,7 +237,7 @@ export function FormChatAppDetail({ appConfig, className }: FormChatAppDetailPro
             
             if (controlType === 'file-list') {
               // 文件列表类型 - 处理多个文件
-              currentFormInputs[fieldId] = successfulUploads.map(file => ({
+              processedFormInputs[fieldId] = successfulUploads.map(file => ({
                 type: file.type.startsWith("image/") ? "image" : "document",
                 transfer_method: "local_file",
                 url: "",
@@ -229,7 +245,7 @@ export function FormChatAppDetail({ appConfig, className }: FormChatAppDetailPro
               }));
             } else {
               // 单文件类型 - 使用第一个文件
-              currentFormInputs[fieldId] = {
+              processedFormInputs[fieldId] = {
                 type: successfulUploads[0].type.startsWith("image/") ? "image" : "document",
                 transfer_method: "local_file",
                 url: "",
@@ -241,12 +257,14 @@ export function FormChatAppDetail({ appConfig, className }: FormChatAppDetailPro
           }
         } else {
           userContentParts.push(`${fieldConfig?.label || fieldId}: ${value}`)
-          currentFormInputs[fieldId] = value
+          processedFormInputs[fieldId] = value
         }
       }
 
       // 保存表单参数，供后续聊天使用
-      setSubmittedInputs(currentFormInputs)
+      setSubmittedInputs(processedFormInputs)
+      // 同时更新当前表单数据
+      setCurrentFormInputs(processedFormInputs)
 
     const userMessage: ChatMessage = {
         id: `user-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
@@ -273,7 +291,7 @@ export function FormChatAppDetail({ appConfig, className }: FormChatAppDetailPro
         query: "",
         user: "test_user",
         conversation_id: "",
-        inputs: currentFormInputs, // 表单参数
+        inputs: processedFormInputs, // 表单参数
         files: chatUploadedFiles.filter(f => f.uploadFileId && !f.error).map(f => ({
           type: f.type.startsWith("image/") ? "image" : "document",
           transfer_method: "local_file",
@@ -356,6 +374,8 @@ export function FormChatAppDetail({ appConfig, className }: FormChatAppDetailPro
   const handleFormReset = () => {
     // 清除已提交的表单状态
     setSubmittedInputs(null);
+    // 清除当前表单数据
+    setCurrentFormInputs({});
     setSubmittedFiles([]);
     
     // 清除聊天文件上传
@@ -744,6 +764,8 @@ export function FormChatAppDetail({ appConfig, className }: FormChatAppDetailPro
                   isSubmitting={isFormSubmitting}
                   onFileUpload={handleFileUploadForForm}
                   onRemoveFile={handleRemoveFileForForm}
+                  hideSubmitButton={appConfig.type === AppType.CHAT}
+                  onFieldChange={handleFormFieldChange}
                 />
               </div>
             )}

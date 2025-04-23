@@ -39,6 +39,7 @@ interface DynamicFormProps {
   onFileUpload?: (fieldId: string, file: File) => Promise<UploadedFile | null>
   onRemoveFile?: (fieldId: string, fileId: string) => void
   hideSubmitButton?: boolean
+  onFieldChange?: (fieldData: Record<string, any>) => void
 }
 
 export function DynamicForm({
@@ -52,6 +53,7 @@ export function DynamicForm({
   onFileUpload,
   onRemoveFile,
   hideSubmitButton,
+  onFieldChange,
 }: DynamicFormProps) {
   // 初始化表单数据
   const initialFormData = fields.reduce(
@@ -81,7 +83,13 @@ export function DynamicForm({
 
   // 处理表单字段变化
   const handleChange = (id: string, value: any) => {
-    setFormData((prev) => ({ ...prev, [id]: value }))
+    const updatedData = { ...formData, [id]: value };
+    setFormData(updatedData);
+    
+    // 如果提供了onFieldChange回调，通知父组件
+    if (onFieldChange) {
+      onFieldChange({ [id]: value });
+    }
   }
 
   // 处理文件上传
@@ -112,10 +120,16 @@ export function DynamicForm({
     }));
 
     // Update formData: Store the UploadedFile objects
-    setFormData((prev) => ({
-      ...prev,
+    const updatedFormData = {
+      ...formData,
       [id]: newUploadedFilesInfo, // Store the array of UploadedFile objects
-    }))
+    };
+    setFormData(updatedFormData);
+
+    // 通知父组件文件字段变化
+    if (onFieldChange) {
+      onFieldChange({ [id]: newUploadedFilesInfo });
+    }
 
     // Clear file input
     e.target.value = ""
@@ -133,10 +147,17 @@ export function DynamicForm({
       }
     })
      // Update formData
-    setFormData((prev) => ({
-      ...prev,
-      [fieldId]: (prev[fieldId] || []).filter((file: UploadedFile) => file.id !== fileId),
-    }))
+    const updatedFiles = (formData[fieldId] || []).filter((file: UploadedFile) => file.id !== fileId);
+    const updatedFormData = {
+      ...formData,
+      [fieldId]: updatedFiles,
+    };
+    setFormData(updatedFormData);
+
+    // 通知父组件文件被移除
+    if (onFieldChange) {
+      onFieldChange({ [fieldId]: updatedFiles });
+    }
 
     // Call the remove function passed via props (if provided)
     if (onRemoveFile) {
