@@ -27,6 +27,10 @@ const nextConfig = {
     parallelServerBuildTraces: true,
     parallelServerCompiles: true,
   },
+  // Remove publicRuntimeConfig as it's not the standard way in App Router
+  // publicRuntimeConfig: {
+  //   API_BASE_URL: process.env.API_BASE_URL || 'http://localhost:8087',
+  // },
 }
 
 if (userConfig) {

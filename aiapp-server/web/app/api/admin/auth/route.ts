@@ -8,7 +8,7 @@ export async function POST(request: NextRequest) {
 
     // 在实际应用中，这里应该检查数据库中的用户信息
     // 这里使用简单的硬编码检查，用于演示
-    if (username === "admin" && password === "admin123") {
+    if (username === "admin" && password === "tQU75P") {
       // 创建响应对象
       const response = NextResponse.json({ 
         success: true, 

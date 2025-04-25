@@ -13,6 +13,8 @@ import { UserProfile } from "@/components/user-profile"
 import { AppDetailDialog } from "@/components/app-detail-dialog"
 import { useToast } from "@/components/ui/use-toast"
 import { useMobile } from "@/hooks/use-mobile"
+import { AppConfig } from "@/types/app-config"
+import { API_BASE_URL } from '@/lib/config'; // 从配置文件导入 API_BASE_URL
 
 export default function FavoritesPage() {
   const router = useRouter()
@@ -25,13 +27,18 @@ export default function FavoritesPage() {
   const [selectedApp, setSelectedApp] = useState<any | null>(null)
   const [isDetailOpen, setIsDetailOpen] = useState(false)
   const [mounted, setMounted] = useState(false)
-  const [allApps, setAllApps] = useState<any[]>([])
+  const [allApps, setAllApps] = useState<AppConfig[]>([])
 
   // 从后端获取应用数据
   useEffect(() => {
     const fetchApps = async () => {
+      // 由于使用硬编码值，不需要检查 API_BASE_URL 是否存在
       try {
-        const response = await fetch('http://localhost:8087/api/dify-apps')
+        const response = await fetch(`${API_BASE_URL}/api/dify-apps`)
+        if (!response.ok) {
+          console.error("Failed to fetch apps:", response.status, response.statusText);
+          return
+        }
         const data = await response.json()
         setAllApps(data)
       } catch (error) {

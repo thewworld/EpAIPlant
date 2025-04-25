@@ -13,12 +13,14 @@ import { Sidebar } from "@/components/sidebar"
 import { UserProfile } from "@/components/user-profile"
 import { AppDetailDialog } from "@/components/app-detail-dialog"
 import { AppConfig, AppType } from "@/types/app-config"
+import { AppCard } from '@/components/app-card'
+import { API_BASE_URL } from '@/lib/config'; // 从配置文件导入 API_BASE_URL
 
 export default function MarketplacePage() {
   const router = useRouter()
   const [searchQuery, setSearchQuery] = useState("")
   const [filteredApps, setFilteredApps] = useState<any[]>([])
-  const [allApps, setAllApps] = useState<any[]>([])
+  const [allApps, setAllApps] = useState<AppConfig[]>([])
   const [recentApps, setRecentApps] = useState<any[]>([])
   const [favoriteApps, setFavoriteApps] = useState<string[]>([])
   const [selectedApp, setSelectedApp] = useState<any | null>(null)
@@ -29,21 +31,26 @@ export default function MarketplacePage() {
   // 从后端获取应用数据
   useEffect(() => {
     const fetchApps = async () => {
+      // 由于使用硬编码值，不需要检查 API_BASE_URL 是否存在
       try {
-        const response = await fetch('http://localhost:8087/api/dify-apps')
+        const response = await fetch(`${API_BASE_URL}/api/dify-apps`)
+        if (!response.ok) {
+          console.error("Failed to fetch apps:", response.status, response.statusText);
+          return
+        }
         const data = await response.json()
         setAllApps(data)
         setFilteredApps(data)
         
         // 提取所有唯一的分类
-        const uniqueCategories = Array.from(new Set(data.map((app: any) => app.category)))
+        const uniqueCategories = Array.from(new Set(data.map((app: any) => app.category))) as string[];
         setCategories(['全部', ...uniqueCategories])
       } catch (error) {
         console.error('获取应用列表失败:', error)
       }
     }
     fetchApps()
-  }, [])
+  }, []) // 依赖项数组为空，因为 API_BASE_URL 是常量
 
   // 从本地存储加载最近使用的应用和收藏的应用
   useEffect(() => {

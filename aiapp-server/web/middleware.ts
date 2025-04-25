@@ -4,11 +4,18 @@ import type { NextRequest } from 'next/server'
 export function middleware(request: NextRequest) {
   // 只处理 /admin 路径
   if (request.nextUrl.pathname.startsWith('/admin')) {
-    // 跳过登录页面的认证检查
-    if (
-      request.nextUrl.pathname === '/admin/login' ||
-      request.nextUrl.pathname.startsWith('/admin/login/')
-    ) {
+    // 登录页面不需要验证，直接通过
+    if (request.nextUrl.pathname === '/admin/login' || 
+        request.nextUrl.pathname === '/admin/login/') {
+      // 如果已登录访问登录页，重定向到控制面板
+      if (request.cookies.has('adminLoggedIn')) {
+        return NextResponse.redirect(new URL('/admin/dashboard', request.url))
+      }
+      return NextResponse.next()
+    }
+    
+    // API路由不处理重定向
+    if (request.nextUrl.pathname.startsWith('/api/')) {
       return NextResponse.next()
     }
 

@@ -185,7 +185,7 @@ export function LoginForm() {
   const loginWithPassword = async (username: string, password: string) => {
     return new Promise<{ user: { name: string }; token: string }>((resolve, reject) => {
       setTimeout(() => {
-        if (username === "admin" && password === "password") {
+        if (username === "admin" && password === "fTgnU7") {
           resolve({
             user: { name: username },
             token: "sample-jwt-token",

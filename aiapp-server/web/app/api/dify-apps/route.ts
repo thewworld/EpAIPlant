@@ -1,8 +1,11 @@
 import { NextResponse } from 'next/server';
+import { API_BASE_URL } from '@/lib/config'; // 从配置文件导入 API_BASE_URL
 
-const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:8087';
+// 移除环境变量相关代码
+// const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
 
 export async function GET() {
+  // 不需要检查 API_BASE_URL 是否存在
   try {
     const response = await fetch(`${API_BASE_URL}/api/dify-apps`);
     
@@ -22,6 +25,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  // 不需要检查 API_BASE_URL 是否存在
   try {
     const body = await request.json();
     

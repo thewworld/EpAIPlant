@@ -2,8 +2,8 @@
 
 import type React from "react"
 
-import { useState } from "react"
-import { useRouter } from "next/navigation"
+import { useState, useEffect } from "react"
+import { useSearchParams } from "next/navigation"
 import { useToast } from "@/components/ui/use-toast"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -17,8 +17,11 @@ export function AdminLoginForm() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
   const { toast } = useToast()
-  const router = useRouter()
+  const searchParams = useSearchParams()
 
+  // 获取回调URL，如果存在的话
+  const callbackUrl = searchParams.get('callbackUrl') || '/admin/dashboard'
+  
   // 修改 handleSubmit 函数，使用API路由
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -48,7 +51,7 @@ export function AdminLoginForm() {
 
         // 使用window.location进行页面重定向，强制页面重新加载
         // 这样可以确保服务器端渲染时能正确读取cookie状态
-        window.location.href = "/admin/dashboard"
+        window.location.href = callbackUrl
       } else {
         setError(data.message || "用户名或密码错误")
         toast({

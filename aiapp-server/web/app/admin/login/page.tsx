@@ -8,7 +8,7 @@ export const metadata: Metadata = {
 
 export default function AdminLoginPage() {
   return (
-    <div className="w-full flex flex-col items-center justify-center">
+    <div className="min-h-screen w-full bg-gray-50 flex flex-col items-center justify-center">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <div className="flex justify-center">
           <div className="h-16 w-16 relative">
