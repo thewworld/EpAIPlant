@@ -28,8 +28,9 @@ public class DifyAppServiceIntegrationTest {
     private DifyAppService difyAppService;
     
 
+//    private String difyApiKey="app-VAWGBzIeUUOpyoYsbfsEK2p9";
     private String difyApiKey="app-0FLLSJy8Irqr3r6TnFmrNgOe";
-    
+
     /**
      * 测试获取应用参数
      * 注意：此测试需要实际的Dify API环境

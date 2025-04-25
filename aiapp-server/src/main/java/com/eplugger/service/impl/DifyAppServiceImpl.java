@@ -14,6 +14,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestTemplate;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -173,12 +174,60 @@ public class DifyAppServiceImpl implements DifyAppService {
             }
             
             if (responseBody.containsKey("user_input_form")) {
-                parameters.setUserInputForm(objectMapper.convertValue(
-                        responseBody.get("user_input_form"), 
-                        objectMapper.getTypeFactory().constructCollectionType(
-                                List.class, 
-                                objectMapper.getTypeFactory().constructMapType(
-                                        Map.class, String.class, DifyParameters.FormControl.class))));
+                List<Map<String, Object>> rawForms = (List<Map<String, Object>>) responseBody.get("user_input_form");
+                List<Map<DifyParameters.FormControlType, DifyParameters.FormControl>> formControls = new ArrayList<>();
+                
+                for (Map<String, Object> form : rawForms) {
+                    for (Map.Entry<String, Object> entry : form.entrySet()) {
+                        String type = entry.getKey();  // 获取类型名称，如"text-input"
+                        Map<String, Object> controlData = (Map<String, Object>) entry.getValue();
+                        
+                        // 往控件数据中添加type属性
+                        controlData.put("type", type);
+                        
+                        // 找到匹配的FormControlType枚举
+                        DifyParameters.FormControlType controlType = null;
+                        for (DifyParameters.FormControlType formType : DifyParameters.FormControlType.values()) {
+                            if (formType.getValue().equals(type)) {
+                                controlType = formType;
+                                break;
+                            }
+                        }
+                        
+                        if (controlType != null) {
+                            // 创建适当类型的FormControl
+                            DifyParameters.FormControl control = null;
+                            switch (controlType) {
+                                case TEXT_INPUT:
+                                    control = objectMapper.convertValue(controlData, DifyParameters.TextInput.class);
+                                    break;
+                                case PARAGRAPH:
+                                    control = objectMapper.convertValue(controlData, DifyParameters.Paragraph.class);
+                                    break;
+                                case SELECT:
+                                    control = objectMapper.convertValue(controlData, DifyParameters.Select.class);
+                                    break;
+                                case NUMBER:
+                                    control = objectMapper.convertValue(controlData, DifyParameters.Number.class);
+                                    break;
+                                case FILE_INPUT:
+                                    control = objectMapper.convertValue(controlData, DifyParameters.FileInput.class);
+                                    break;
+                                case FILE_LIST:
+                                    control = objectMapper.convertValue(controlData, DifyParameters.FileList.class);
+                                    break;
+                            }
+                            
+                            if (control != null) {
+                                Map<DifyParameters.FormControlType, DifyParameters.FormControl> controlMap = new HashMap<>();
+                                controlMap.put(controlType, control);
+                                formControls.add(controlMap);
+                            }
+                        }
+                    }
+                }
+                
+                parameters.setUserInputForm(formControls);
             }
             
             if (responseBody.containsKey("sensitive_word_avoidance")) {

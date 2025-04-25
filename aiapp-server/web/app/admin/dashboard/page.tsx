@@ -1,8 +1,36 @@
+"use client"
+
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Activity, AppWindow, CpuIcon, Database, Users } from "lucide-react"
+import { AppUsageTrendChart, AppTypeDistributionChart } from "@/components/admin/dashboard-charts"
+
+// 创建固定的活动时间，避免hydration错误
+const activityTimes = [
+  "2025/4/22 14:30:00",
+  "2025/4/23 09:15:22",
+  "2025/4/24 16:45:38",
+  "2025/4/25 11:20:45",
+]
+
+// 活动数据
+const activityData = [
+  { type: "应用创建", description: "管理员创建了新应用「智能助手」", time: activityTimes[0] },
+  { type: "配置更新", description: "管理员更新了「数据分析」应用的API配置", time: activityTimes[1] },
+  { type: "应用创建", description: "管理员创建了新应用「文档摘要器」", time: activityTimes[2] },
+  { type: "配置更新", description: "管理员更新了「智能客服」应用的模型配置", time: activityTimes[3] },
+]
 
 export default function DashboardPage() {
+  // 客户端状态
+  const [mounted, setMounted] = useState(false)
+  
+  // 仅在客户端渲染后设置为已挂载
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+  
   return (
     <div className="space-y-6">
       <div>
@@ -72,9 +100,11 @@ export default function DashboardPage() {
                 <CardDescription>过去30天的应用调用量趋势</CardDescription>
               </CardHeader>
               <CardContent className="h-80">
-                <div className="h-full w-full rounded-md border border-dashed border-gray-300 flex items-center justify-center">
-                  <p className="text-muted-foreground">图表加载中...</p>
-                </div>
+                {mounted ? <AppUsageTrendChart /> : (
+                  <div className="h-full w-full rounded-md border border-dashed border-gray-300 flex items-center justify-center">
+                    <p className="text-muted-foreground">图表加载中...</p>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
@@ -84,9 +114,11 @@ export default function DashboardPage() {
                 <CardDescription>按应用类型统计的分布情况</CardDescription>
               </CardHeader>
               <CardContent className="h-80">
-                <div className="h-full w-full rounded-md border border-dashed border-gray-300 flex items-center justify-center">
-                  <p className="text-muted-foreground">图表加载中...</p>
-                </div>
+                {mounted ? <AppTypeDistributionChart /> : (
+                  <div className="h-full w-full rounded-md border border-dashed border-gray-300 flex items-center justify-center">
+                    <p className="text-muted-foreground">图表加载中...</p>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>
@@ -138,14 +170,14 @@ export default function DashboardPage() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {[1, 2, 3, 4].map((i) => (
+                  {activityData.map((activity, i) => (
                     <div key={i} className="flex items-start space-x-4">
                       <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium">{i % 2 === 0 ? "应用创建" : "配置更新"}</p>
+                        <p className="text-sm font-medium">{activity.type}</p>
                         <p className="text-sm text-muted-foreground">
-                          {i % 2 === 0 ? "管理员创建了新应用「智能助手」" : "管理员更新了「数据分析」应用的API配置"}
+                          {activity.description}
                         </p>
-                        <p className="text-xs text-muted-foreground">{new Date().toLocaleString()}</p>
+                        <p className="text-xs text-muted-foreground">{activity.time}</p>
                       </div>
                     </div>
                   ))}

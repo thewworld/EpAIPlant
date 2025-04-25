@@ -12,6 +12,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Input } from "@/components/ui/input"
 import { useToast } from "@/components/ui/use-toast"
+import { adminLogout } from "./admin-login-form"
 
 export default function AdminHeader() {
   const [searchQuery, setSearchQuery] = useState("")
@@ -19,18 +20,16 @@ export default function AdminHeader() {
 
   const handleLogout = async () => {
     try {
-      const response = await fetch("/api/admin/auth", {
-        method: "DELETE",
+      // 使用我们创建的静态登出函数
+      adminLogout();
+      
+      // 显示成功提示
+      toast({
+        title: "登出成功",
+        description: "您已成功退出系统",
       })
-
-      if (response.ok) {
-        toast({
-          title: "登出成功",
-          description: "您已成功退出系统",
-        })
-        // 使用硬跳转而不是客户端路由，确保页面完全重新加载，以正确显示登录页面（无导航栏）
-        window.location.href = "/admin/login"
-      }
+      
+      // 注意：adminLogout 函数已经处理了重定向，此处不需要再次重定向
     } catch (error) {
       toast({
         variant: "destructive",

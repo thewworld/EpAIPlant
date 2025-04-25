@@ -15,6 +15,7 @@ import { CodeBlock } from "@/components/code-block"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { AlertDialog, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { AlertDialogAction } from "@/components/ui/alert-dialog"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
 // 应用数据类型
 interface ApplicationData {
@@ -360,9 +361,25 @@ export default function ApplicationDetailPage() {
                 <p className="text-sm font-medium text-gray-500 mb-1">API Key</p>
                 <div className="flex items-center space-x-2">
                   <code className="bg-gray-100 px-2 py-1 rounded text-xs flex-1 overflow-x-auto">{appData.apiKey}</code>
-                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={copyApiKey}>
-                    {copied ? <CheckCircle className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
-                  </Button>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={copyApiKey}>
+                          {copied ? <CheckCircle className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        {copied ? (
+                          <p className="text-green-500">已复制到剪贴板!</p>
+                        ) : (
+                          <>
+                            <p>复制API Key</p>
+                            <p className="text-xs text-gray-400">复制API Key到剪贴板</p>
+                          </>
+                        )}
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                 </div>
               </div>
 

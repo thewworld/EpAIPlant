@@ -1271,7 +1271,10 @@ export function ApplicationForm({ mode, id, initialData, isLoading = false, isUs
                           {isSyncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                         </Button>
                       </TooltipTrigger>
-                      <TooltipContent>同步应用信息</TooltipContent>
+                      <TooltipContent>
+                        <p>同步应用信息</p>
+                        <p className="text-xs text-gray-400">根据API Key自动获取Dify应用配置</p>
+                      </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
                   <TooltipProvider>
@@ -1288,7 +1291,15 @@ export function ApplicationForm({ mode, id, initialData, isLoading = false, isUs
                           <Copy className="h-4 w-4" />
                         </Button>
                       </TooltipTrigger>
-                      <TooltipContent>{apiKeyCopied ? "已复制!" : "复制API Key"}</TooltipContent>
+                      <TooltipContent>
+                        {apiKeyCopied ? (
+                          <p className="text-green-500">已复制到剪贴板!</p>
+                        ) : (
+                          <>
+                            <p>复制API Key</p>
+                          </>
+                        )}
+                      </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
                 </div>
