@@ -133,6 +133,18 @@ export function FormChatAppDetail({ appConfig, className }: FormChatAppDetailPro
         ...currentFormInputs
       };
       
+      // 确保inputs中的文件字段格式正确（对象而不是数组）
+      Object.keys(combinedInputs).forEach(key => {
+        if (Array.isArray(combinedInputs[key]) && 
+            combinedInputs[key].length > 0 && 
+            combinedInputs[key][0].upload_file_id) {
+          // 如果是单文件字段但错误地存储为数组，则取第一个元素
+          if (combinedInputs[key].length === 1) {
+            combinedInputs[key] = combinedInputs[key][0];
+          }
+        }
+      });
+      
       // 构建完整的请求参数，包含表单参数和聊天输入框参数
       const apiParams: DifyApiParams = {
         query: content,
@@ -143,6 +155,9 @@ export function FormChatAppDetail({ appConfig, className }: FormChatAppDetailPro
         response_mode: appConfig.chatModel === "sse" ? "streaming" : "blocking",
         auto_generate_name: true,
       }
+
+      // 打印请求参数用于调试
+      console.log("发送请求参数:", JSON.stringify(apiParams));
 
       const response = await callDifyApi(
         apiParams,
@@ -217,15 +232,15 @@ export function FormChatAppDetail({ appConfig, className }: FormChatAppDetailPro
     let thinkingMessageId: string | undefined
 
     try {
-       for (const fieldId in formData) {
+      for (const fieldId in formData) {
         const fieldConfig = appConfig.formConfig?.fields.find((f) => f.id === fieldId)
         const value = formData[fieldId]
 
-          if (fieldConfig?.type === FieldType.FILE && Array.isArray(value)) {
+        if (fieldConfig?.type === FieldType.FILE && Array.isArray(value)) {
           const uploadedFilesArray = value as UploadedFile[]
           const successfulUploads = uploadedFilesArray.filter(f => f.uploadFileId && !f.error)
 
-            if (successfulUploads.length > 0) {
+          if (successfulUploads.length > 0) {
             userContentParts.push(`${fieldConfig?.label || fieldId}: ${successfulUploads.map(f => f.name).join(', ')}`)
                 
             // 处理表单文件字段
@@ -236,7 +251,7 @@ export function FormChatAppDetail({ appConfig, className }: FormChatAppDetailPro
             );
             
             if (controlType === 'file-list') {
-              // 文件列表类型 - 处理多个文件
+              // 文件列表类型 - 处理多个文件 - 转换为正确的格式
               processedFormInputs[fieldId] = successfulUploads.map(file => ({
                 type: file.type.startsWith("image/") ? "image" : "document",
                 transfer_method: "local_file",
@@ -244,7 +259,7 @@ export function FormChatAppDetail({ appConfig, className }: FormChatAppDetailPro
                 upload_file_id: file.uploadFileId
               }));
             } else {
-              // 单文件类型 - 使用第一个文件
+              // 单文件类型 - 使用第一个文件 - 确保是对象而不是数组
               processedFormInputs[fieldId] = {
                 type: successfulUploads[0].type.startsWith("image/") ? "image" : "document",
                 transfer_method: "local_file",
@@ -255,27 +270,37 @@ export function FormChatAppDetail({ appConfig, className }: FormChatAppDetailPro
           } else {
             userContentParts.push(`${fieldConfig?.label || fieldId}: (无有效上传文件)`)
           }
+        } else if (fieldConfig?.type === FieldType.FILE && value && typeof value === 'object' && value.uploadFileId) {
+          // 处理单文件直接存储为对象的情况
+          userContentParts.push(`${fieldConfig?.label || fieldId}: ${value.name}`);
+          
+          // 转换为正确的文件对象格式
+          processedFormInputs[fieldId] = {
+            type: value.type.startsWith("image/") ? "image" : "document",
+            transfer_method: "local_file",
+            url: "",
+            upload_file_id: value.uploadFileId
+          };
         } else {
           userContentParts.push(`${fieldConfig?.label || fieldId}: ${value}`)
           processedFormInputs[fieldId] = value
         }
       }
 
-      // 保存表单参数，供后续聊天使用
-      setSubmittedInputs(processedFormInputs)
-      // 同时更新当前表单数据
-      setCurrentFormInputs(processedFormInputs)
+      const formContent = userContentParts.join('\n')
 
+      // 创建用户消息
     const userMessage: ChatMessage = {
-        id: `user-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+        id: `user-${Date.now()}-${Math.random().toString(36).substring(2, 15)}`,
       role: "user",
-        content: userContentParts.join("\n"),
+        content: formContent,
       timestamp: new Date(),
     }
 
+      // 添加用户消息到会话
       setMessages(prev => [...prev, userMessage])
 
-      // 立即添加一个正在思考的助手消息
+      // 生成思考消息 ID
       thinkingMessageId = `thinking-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
       const thinkingMessage: ChatMessage = {
         id: thinkingMessageId,
@@ -286,22 +311,15 @@ export function FormChatAppDetail({ appConfig, className }: FormChatAppDetailPro
       }
       setMessages(prev => [...prev, thinkingMessage])
 
-      // 构建完整的请求参数，包含表单参数和聊天输入框参数
-      const apiParams: DifyApiParams = {
-        query: "",
+      // 准备API请求参数
+      const apiParams: ApiRequestParams = {
+        query: formContent.length > 0 ? formContent : " ", // 确保至少有一个空格，避免空字符串
+        inputs: processedFormInputs,
         user: "test_user",
-        conversation_id: "",
-        inputs: processedFormInputs, // 表单参数
-        files: chatUploadedFiles.filter(f => f.uploadFileId && !f.error).map(f => ({
-          type: f.type.startsWith("image/") ? "image" : "document",
-          transfer_method: "local_file",
-          url: "",
-          upload_file_id: f.uploadFileId!,
-        })), // 聊天输入框上传的文件
-        response_mode: appConfig.chatModel === "sse" ? "streaming" : "blocking",
-        auto_generate_name: true,
+        response_mode: appConfig.chatModel === "sse" ? "streaming" : "blocking"
       }
-      
+
+      // 发送请求
       const response = await callDifyApi(
         apiParams,
         {
@@ -311,54 +329,70 @@ export function FormChatAppDetail({ appConfig, className }: FormChatAppDetailPro
         },
         // 流式数据处理
         (content) => {
-          if (thinkingMessageId) {
             setMessages(prev => prev.map(msg =>
               msg.id === thinkingMessageId
                 ? { ...msg, content, isStreaming: true }
                 : msg
             ))
-            // 当开始收到流式数据时，关闭加载状态
-            if (content) {
-              setIsLoading(false)
-            }
-          }
+          setIsLoading(false) // 收到首个响应时关闭加载状态
         },
         // 流式结束处理
         () => {
-          if (thinkingMessageId) {
             setMessages(prev => prev.map(msg =>
               msg.id === thinkingMessageId
                 ? { ...msg, isStreaming: false }
                 : msg
             ))
-          }
         }
       )
 
+      // 阻塞响应处理
       if (response && thinkingMessageId) {
-        // 如果是阻塞式响应，更新消息内容
         setMessages(prev => prev.map(msg =>
           msg.id === thinkingMessageId
             ? { ...msg, content: response.content, isStreaming: false }
             : msg
         ))
-        setIsLoading(false)
+      }
+
+      // 保存已提交的表单输入，用于后续聊天参考
+      setSubmittedInputs(processedFormInputs);
+      
+      // 保存已经上传的文件信息
+      const submittedFiles = Object.values(formData)
+        .filter(value => Array.isArray(value))
+        .flatMap(files => files)
+        .filter((file: any) => file && file.uploadFileId)
+      
+      if (submittedFiles.length > 0) {
+        setSubmittedFiles(submittedFiles);
       }
     } catch (error) {
-      console.error("表单提交失败:", error)
+      console.error("表单提交错误:", error)
       const errorMessage = error instanceof Error ? error.message : "处理表单时出错"
-      // 移除正在思考的消息
+      
       if (thinkingMessageId) {
-        setMessages(prev => prev.filter(msg => msg.id !== thinkingMessageId))
-      }
+        // 更新思考消息为错误消息
+        setMessages(prev => prev.map(msg => 
+          msg.id === thinkingMessageId 
+            ? { 
+                ...msg, 
+                content: `错误: ${errorMessage}`, 
+                isStreaming: false 
+              } 
+            : msg
+        ))
+      } else {
+        // 如果没有思考消息，添加一个错误消息
        const errorChatMessage: ChatMessage = {
-        id: `err-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+          id: `error-${Date.now()}`,
           role: "assistant",
           content: `错误: ${errorMessage}`,
           timestamp: new Date(),
-          isStreaming: false, 
        }
       setMessages(prev => [...prev, errorChatMessage])
+      }
+      
       toast({
         title: "错误",
         description: errorMessage,
@@ -545,6 +579,7 @@ export function FormChatAppDetail({ appConfig, className }: FormChatAppDetailPro
            ['file', 'file-list'].includes(key)
          );
          
+         // 创建正确格式的文件对象
          const inputData = {
              type: file.type.startsWith("image/") ? "image" : "document",
              transfer_method: "local_file",
@@ -562,7 +597,7 @@ export function FormChatAppDetail({ appConfig, className }: FormChatAppDetailPro
              newInputs[fieldId] = [inputData];
            }
          } else {
-           // 单文件类型，直接替换
+           // 单文件类型，使用正确格式的对象，直接替换
            newInputs[fieldId] = inputData;
          }
          
@@ -570,6 +605,7 @@ export function FormChatAppDetail({ appConfig, className }: FormChatAppDetailPro
          return newInputs;
       });
 
+      // 更新submittedFiles，确保格式正确
       setSubmittedFiles(prevFiles => {
           const newFileEntry = {
               type: file.type.startsWith("image/") ? "image" : "document",
@@ -577,15 +613,18 @@ export function FormChatAppDetail({ appConfig, className }: FormChatAppDetailPro
               url: "",
               upload_file_id: result.id,
           };
-          // Avoid duplicates if the same file is somehow uploaded again?
-          // Simple approach: Add the new file entry.
+          
+          // 添加到文件列表中
           const updatedFiles = [...prevFiles, newFileEntry];
           console.log(`FormChatAppDetail: Auto-updating submittedFiles`, updatedFiles);
           return updatedFiles;
-          // More robust: Filter out previous entries for the same fieldId before adding?
       });
 
       toast({ title: "成功", description: `${file.name} 上传成功 (表单)。` });
+      
+      // 添加日志，确认返回的数据结构
+      console.log(`返回给DynamicForm的文件信息:`, { ...uploadedFileInfo, id: tempId });
+      
       // Return the info needed by DynamicForm to update *its* internal state
       return { ...uploadedFileInfo, id: tempId }; // Return with the original tempId
 

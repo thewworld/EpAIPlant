@@ -119,16 +119,56 @@ export function DynamicForm({
         [id]: newUploadedFilesInfo
     }));
 
-    // Update formData: Store the UploadedFile objects
+    // 查找字段配置以确定是否为多文件类型
+    const field = fields.find(f => f.id === id);
+    const originalData = field?.originalData || {};
+    const isFileList = originalData && Object.keys(originalData).includes('file-list');
+    
+    // Update formData:
+    // 对于file-list字段类型，保留数组格式
+    // 对于单文件字段，如果只有一个文件，使用对象格式
     const updatedFormData = {
       ...formData,
-      [id]: newUploadedFilesInfo, // Store the array of UploadedFile objects
     };
+    
+    if (isFileList) {
+      // 多文件字段 - 存储文件数组
+      updatedFormData[id] = newUploadedFilesInfo;
+    } else {
+      // 单文件字段 - 只保留最后上传的文件
+      updatedFormData[id] = newUploadedFilesInfo.length > 0 ? 
+        newUploadedFilesInfo[newUploadedFilesInfo.length - 1] : 
+        null;
+    }
+    
     setFormData(updatedFormData);
+    console.log(`DynamicForm: 更新字段 ${id} 的数据:`, updatedFormData[id]);
 
-    // 通知父组件文件字段变化
+    // 通知父组件文件字段变化 - 转换为正确的格式后再通知
     if (onFieldChange) {
-      onFieldChange({ [id]: newUploadedFilesInfo });
+      if (isFileList) {
+        // 多文件字段 - 需要转换每个对象为正确格式
+        const formattedFiles = newUploadedFilesInfo.map(file => ({
+          type: file.type.startsWith("image/") ? "image" : "document",
+          transfer_method: "local_file",
+          url: "",
+          upload_file_id: file.uploadFileId
+        }));
+        onFieldChange({ [id]: formattedFiles });
+      } else if (newUploadedFilesInfo.length > 0) {
+        // 单文件字段 - 转换为正确格式
+        const lastFile = newUploadedFilesInfo[newUploadedFilesInfo.length - 1];
+        onFieldChange({
+          [id]: {
+            type: lastFile.type.startsWith("image/") ? "image" : "document",
+            transfer_method: "local_file",
+            url: "",
+            upload_file_id: lastFile.uploadFileId
+          }
+        });
+      } else {
+        onFieldChange({ [id]: null });
+      }
     }
 
     // Clear file input
@@ -154,9 +194,31 @@ export function DynamicForm({
     };
     setFormData(updatedFormData);
 
+    // 查找字段配置以确定是否为多文件类型
+    const field = fields.find(f => f.id === fieldId);
+    const originalData = field?.originalData || {};
+    const isFileList = originalData && Object.keys(originalData).includes('file-list');
+
     // 通知父组件文件被移除
     if (onFieldChange) {
-      onFieldChange({ [fieldId]: updatedFiles });
+      if (isFileList) {
+        if (updatedFiles.length > 0) {
+          // 多文件字段，仍有剩余文件 - 需要转换每个对象为正确格式
+          const formattedFiles = updatedFiles.map((file: UploadedFile) => ({
+            type: file.type.startsWith("image/") ? "image" : "document",
+            transfer_method: "local_file",
+            url: "",
+            upload_file_id: file.uploadFileId
+          }));
+          onFieldChange({ [fieldId]: formattedFiles });
+        } else {
+          // 没有剩余文件
+          onFieldChange({ [fieldId]: [] });
+        }
+      } else {
+        // 单文件字段被删除
+        onFieldChange({ [fieldId]: null });
+      }
     }
 
     // Call the remove function passed via props (if provided)

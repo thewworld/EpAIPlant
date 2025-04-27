@@ -28,6 +28,29 @@ export interface DifyApiResponse {
   error?: string
 }
 
+// 将内部文件对象转换为正确格式
+function transformFileObject(fileObject: any): any {
+  if (!fileObject) return fileObject;
+  
+  // 检查是否有uploadFileId字段，表示这是一个前端文件对象需要转换
+  if (fileObject.uploadFileId) {
+    return {
+      type: fileObject.type?.startsWith("image/") ? "image" : "document",
+      transfer_method: "local_file",
+      url: "",
+      upload_file_id: fileObject.uploadFileId
+    };
+  }
+  
+  // 已经是正确格式的对象，直接返回
+  if (fileObject.upload_file_id) {
+    return fileObject;
+  }
+  
+  // 无法识别的格式，返回原对象
+  return fileObject;
+}
+
 export async function callDifyApi(
   params: DifyApiParams,
   config: DifyApiConfig,
@@ -39,22 +62,59 @@ export async function callDifyApi(
 
   switch (config.appType) {
     case AppType.CHAT:
-      apiEndpoint = `${API_BASE_URL}/api/dify/chat-messages?appId=${config.appId}`
+      apiEndpoint = `${API_BASE_URL}/api/dify/chat-messages${config.chatModel === "sse" ? "" : "/block"}?appId=${config.appId}`
       break
     case AppType.WORKFLOW:
       apiEndpoint = `${API_BASE_URL}/api/dify/workflow/${config.chatModel === "sse" ? "run/stream" : "run/block"}?appId=${config.appId}`
       break
     case AppType.COMPLETION:
-      apiEndpoint = `${API_BASE_URL}/api/dify/completion-messages?appId=${config.appId}`
+      apiEndpoint = `${API_BASE_URL}/api/dify/completion/messages/${config.chatModel === "sse" ? "stream" : "block"}?appId=${config.appId}`
       break
     default:
-      apiEndpoint = `${API_BASE_URL}/api/dify/chat-messages?appId=${config.appId}`
+      apiEndpoint = `${API_BASE_URL}/api/dify/chat-messages${config.chatModel === "sse" ? "" : "/block"}?appId=${config.appId}`
+  }
+
+  // 处理请求体中的inputs字段，确保文件字段格式正确
+  const processedParams = { ...params };
+  
+  // 检查inputs是否存在
+  if (processedParams.inputs) {
+    // 检查每个input字段，确保文件格式正确
+    Object.keys(processedParams.inputs).forEach(key => {
+      const value = processedParams.inputs![key];
+      
+      // 检查是否是数组，且看起来是文件对象数组
+      if (Array.isArray(value) && value.length > 0) {
+        // 判断是否是文件对象
+        const isFileObject = value[0].uploadFileId || value[0].upload_file_id;
+        
+        if (isFileObject) {
+          // 如果是单文件字段但错误地存储为只有一个元素的数组，取出该元素并转换
+          if (value.length === 1) {
+            processedParams.inputs![key] = transformFileObject(value[0]);
+            console.log(`调整文件字段格式: ${key} 从数组转为正确的对象格式`);
+          } else {
+            // 多文件字段，转换数组中每个元素
+            processedParams.inputs![key] = value.map(item => transformFileObject(item));
+            console.log(`调整文件数组字段格式: ${key} 转换数组中每个元素为正确格式`);
+          }
+        }
+      } 
+      // 检查单个对象是否需要转换
+      else if (value && typeof value === 'object' && (value.uploadFileId || value.id)) {
+        processedParams.inputs![key] = transformFileObject(value);
+        console.log(`调整单个文件对象格式: ${key} 转换为正确格式`);
+      }
+    });
   }
 
   const requestBody = {
-    ...params,
+    ...processedParams,
     response_mode: config.chatModel === "sse" ? "streaming" : "blocking",
   }
+
+  // 打印最终的请求体用于调试
+  console.log("发送请求参数:", JSON.stringify(requestBody));
 
   try {
     if (config.chatModel === "sse") {

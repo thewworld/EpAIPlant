@@ -195,9 +195,6 @@ export function AppCard({ app, onAppClick, onAppDetails }: AppCardProps) {
           <div className="flex-1 min-w-0">
             <div className="flex items-center justify-between">
               <h3 className="font-medium truncate text-gray-800 dark:text-white">{app.name}</h3>
-              <div className="flex items-center text-sm text-gray-500 dark:text-gray-400">
-                <span>{app.type}</span>
-              </div>
             </div>
             <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-2 mt-1">{app.description}</p>
           </div>

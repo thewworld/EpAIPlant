@@ -21,6 +21,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
+import { AIGenerator } from "./ai-generator"
 
 // 表单配置选项
 const APP_CONFIG = {
@@ -735,6 +736,9 @@ export function ApplicationForm({ mode, id, initialData, isLoading = false, isUs
   const [isGenerating, setIsGenerating] = useState(false)
   const [isSyncing, setIsSyncing] = useState(false)
   const [tagInput, setTagInput] = useState("")
+  
+  // 添加AI生成弹窗状态
+  const [aiDialogOpen, setAiDialogOpen] = useState(false)
 
   // 页面标题和返回链接
   const pageTitle = mode === 'create' ? '创建新应用' : '编辑应用'
@@ -1027,38 +1031,24 @@ export function ApplicationForm({ mode, id, initialData, isLoading = false, isUs
     }
   }, [useMonaco, formData.formConfig, handleEditorChange])
 
-  // 使用AI生成应用内容
+  // 修改handleAIGenerate函数
   const handleAIGenerate = useCallback(() => {
-    setIsGenerating(true)
+    setAiDialogOpen(true)
+  }, [])
+  
+  // 处理AI生成应用
+  const handleApplyAIResult = useCallback((optimizedData: any) => {
+    setFormData(prev => ({
+      ...prev,
+      name: optimizedData.name,
+      description: optimizedData.description,
+      logo: optimizedData.logo,
+      openerContent: optimizedData.openerContent
+    }))
     
-    // 模拟API调用延迟
-    setTimeout(() => {
-      const selectedCategory = formData.category || "科研"
-      let template
-      
-      // 安全地获取模板
-      if (selectedCategory === "科研") {
-        template = AI_GENERATED_TEMPLATES["科研"]
-      } else if (selectedCategory === "写作") {
-        template = AI_GENERATED_TEMPLATES["写作"]
-      } else if (selectedCategory === "教育") {
-        template = AI_GENERATED_TEMPLATES["教育"]
-      } else if (selectedCategory === "管理") {
-        template = AI_GENERATED_TEMPLATES["管理"]
-      } else {
-        template = AI_GENERATED_TEMPLATES["科研"] // 默认模板
-      }
-      
-      setFormData({
-        ...formData,
-        ...template,
-        // 保持原来的标签
-        tags: formData.tags
-      })
-      
-      setIsGenerating(false)
-    }, 1000)
-  }, [formData])
+    // 更新Logo预览
+    setLogoPreview(optimizedData.logo)
+  }, [])
 
   // 添加同步应用信息的处理函数
   const handleSyncApp = useCallback(async () => {
@@ -1159,6 +1149,14 @@ export function ApplicationForm({ mode, id, initialData, isLoading = false, isUs
 
   return (
     <div className="space-y-6">
+      {/* AI生成弹窗 */}
+      <AIGenerator
+        open={aiDialogOpen}
+        onOpenChange={setAiDialogOpen}
+        formData={formData}
+        onApply={handleApplyAIResult}
+      />
+      
       <div className="flex justify-between items-center">
         <div className="flex items-center space-x-2">
           <Button variant="outline" size="icon" asChild>
@@ -1207,7 +1205,8 @@ export function ApplicationForm({ mode, id, initialData, isLoading = false, isUs
                   <CardTitle>基础信息</CardTitle>
                   <CardDescription>设置应用的基本信息和分类</CardDescription>
                 </div>
-                <TooltipProvider>
+                {/* 注释掉AI生成按钮 */}
+                {/* <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button 
@@ -1230,7 +1229,7 @@ export function ApplicationForm({ mode, id, initialData, isLoading = false, isUs
                       <p>使用AI自动生成应用内容</p>
                     </TooltipContent>
                   </Tooltip>
-                </TooltipProvider>
+                </TooltipProvider> */}
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
