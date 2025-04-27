@@ -160,6 +160,17 @@ public class DifyAppController {
                     difyApp.setOpenerContent(parameters.getOpeningStatement());
                 }
                 
+                // 设置开场问题列表
+                if (parameters.getSuggestedQuestions() != null && !parameters.getSuggestedQuestions().isEmpty()) {
+                    // 确保不超过最大限制数量
+                    List<String> questions = parameters.getSuggestedQuestions();
+                    if (questions.size() > 10) {
+                        questions = questions.subList(0, 10);
+                        log.warn("同步的开场问题数量超过10个，已截取前10个");
+                    }
+                    difyApp.setSuggestedQuestions(questions);
+                }
+                
                 // 存储表单配置为JSON字符串
                 if (parameters.getUserInputForm() != null) {
                     difyApp.setFormConfig(convertFormConfigToJson(parameters.getUserInputForm()));

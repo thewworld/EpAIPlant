@@ -30,6 +30,7 @@ export interface DifyApp {
   outputType: string
   chatModel: string
   openerContent: string
+  suggestedQuestions?: string[]
   formConfig: string
   apiKey: string
   usage?: {

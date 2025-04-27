@@ -76,6 +76,8 @@ const defaultFormData = {
   outputType: "TEXT",
   chatModel: "sse",
   openerContent: "您好，我是AI助手，有什么可以帮您解决的问题？",
+  suggestedQuestions: [] as string[],
+  newSuggestedQuestion: "",  // 用于临时存储正在编辑的开场问题
   maxTokens: 2048,
   temperature: 0.7,
   topP: 0.9,
@@ -1083,7 +1085,11 @@ export function ApplicationForm({ mode, id, initialData, isLoading = false, isUs
         formConfig: data.formConfig || prev.formConfig,
         logo: data.logo || prev.logo,
         // 确保标签数据被正确填充
-        tags: data.tags || prev.tags
+        tags: data.tags || prev.tags,
+        // 添加开场问题数据
+        suggestedQuestions: data.suggestedQuestions || prev.suggestedQuestions,
+        // 重置新问题输入框
+        newSuggestedQuestion: ''
       }))
       
       // 更新Logo预览
@@ -1137,6 +1143,35 @@ export function ApplicationForm({ mode, id, initialData, isLoading = false, isUs
       handleAddTag()
     }
   }
+  
+  // 处理添加开场问题
+  const handleAddSuggestedQuestion = useCallback(() => {
+    if (formData.newSuggestedQuestion?.trim()) {
+      if (!formData.suggestedQuestions || formData.suggestedQuestions.length < 10) {
+        setFormData((prev) => {
+          const currentQuestions = Array.isArray(prev.suggestedQuestions) ? prev.suggestedQuestions : [];
+          // 避免添加重复问题
+          if (!currentQuestions.includes(prev.newSuggestedQuestion!.trim())) {
+            return { 
+              ...prev, 
+              suggestedQuestions: [...currentQuestions, prev.newSuggestedQuestion!.trim()],
+              newSuggestedQuestion: '' 
+            };
+          }
+          return { ...prev, newSuggestedQuestion: '' };
+        });
+      }
+    }
+  }, [formData.newSuggestedQuestion, formData.suggestedQuestions]);
+
+  // 处理删除开场问题
+  const handleRemoveSuggestedQuestion = useCallback((index: number) => {
+    setFormData((prev) => {
+      const currentQuestions = Array.isArray(prev.suggestedQuestions) ? [...prev.suggestedQuestions] : [];
+      currentQuestions.splice(index, 1);
+      return { ...prev, suggestedQuestions: currentQuestions };
+    });
+  }, []);
 
   if (isLoading) {
     return (
@@ -1494,6 +1529,7 @@ export function ApplicationForm({ mode, id, initialData, isLoading = false, isUs
                     <p className="text-xs text-gray-500">流式响应可实时展示生成内容，阻塞式响应等待完全生成后一次性返回</p>
                   </div>
 
+                  {/* 开场白 */}
                   <div className="space-y-2">
                     <Label htmlFor="openerContent">开场白</Label>
                     <Textarea
@@ -1504,6 +1540,73 @@ export function ApplicationForm({ mode, id, initialData, isLoading = false, isUs
                       placeholder="设置AI助手的开场白"
                       rows={3}
                     />
+                    <p className="text-xs text-gray-500">开场白内容将在对话开始时展示，作为AI助手的第一句话</p>
+                  </div>
+                  
+                  {/* 开场问题 */}
+                  <div className="space-y-2 mt-4">
+                    <Label htmlFor="suggestedQuestions">开场问题</Label>
+                    <div className="flex">
+                      <Input
+                        id="suggestedQuestionInput"
+                        placeholder="请输入开场问题"
+                        value={formData.newSuggestedQuestion || ''}
+                        onChange={(e) => setFormData((prev) => ({ ...prev, newSuggestedQuestion: e.target.value }))}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleAddSuggestedQuestion();
+                          }
+                        }}
+                        disabled={formData.suggestedQuestions && formData.suggestedQuestions.length >= 10}
+                      />
+                      <Button
+                        type="button"
+                        onClick={handleAddSuggestedQuestion}
+                        className="ml-2"
+                        disabled={
+                          !formData.newSuggestedQuestion || 
+                          !formData.newSuggestedQuestion.trim() || 
+                          (formData.suggestedQuestions && formData.suggestedQuestions.length >= 10)
+                        }
+                      >
+                        添加
+                      </Button>
+                    </div>
+                    {formData.suggestedQuestions && formData.suggestedQuestions.length >= 10 && (
+                      <div className="text-xs text-amber-600">
+                        开场问题已达到最大数量限制（10个）
+                      </div>
+                    )}
+                    <p className="text-xs text-gray-500">
+                      开场问题会在对话开始时作为快速提问选项展示给用户，最多可添加10个问题
+                    </p>
+
+                    <div className="border rounded-md p-4 mt-2">
+                      <Label className="mb-2 block">当前开场问题列表</Label>
+                      {(!formData.suggestedQuestions || formData.suggestedQuestions.length === 0) ? (
+                        <div className="text-sm text-muted-foreground italic py-4 text-center border border-dashed rounded-md">
+                          暂无开场问题
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {formData.suggestedQuestions.map((question, index) => (
+                            <div key={index} className="flex items-center justify-between group p-2 hover:bg-gray-50 rounded">
+                              <div className="text-sm flex-1 break-words">{question}</div>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="opacity-0 group-hover:opacity-100 transition-opacity"
+                                onClick={() => handleRemoveSuggestedQuestion(index)}
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </TabsContent>
 

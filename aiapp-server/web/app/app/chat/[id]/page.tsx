@@ -131,7 +131,11 @@ export default function ChatAppPage() {
             ? [{ content: data.openerContent }] 
             : [{ content: "欢迎使用此应用！" }],
           formConfig: formConfig,
-          chatModel: data.chatModel
+          chatModel: data.chatModel,
+          // 确保suggestedQuestions是数组类型
+          suggestedQuestions: Array.isArray(data.suggestedQuestions) 
+            ? [...data.suggestedQuestions] 
+            : (data.suggestedQuestions ? [data.suggestedQuestions] : [])
         })
       } catch (error) {
         console.error("Error fetching app config:", error)

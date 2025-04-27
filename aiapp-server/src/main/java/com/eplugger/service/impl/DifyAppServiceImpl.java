@@ -40,9 +40,15 @@ public class DifyAppServiceImpl implements DifyAppService {
     @Value("${dify.api.base-url}")
     private String difyBaseUrl;
 
+    /**
+     * 最大开场问题数量
+     */
+    private static final int MAX_SUGGESTED_QUESTIONS = 10;
+
     @Override
     @Transactional
     public DifyApp create(DifyApp difyApp) {
+        validateSuggestedQuestions(difyApp);
         return difyAppRepository.save(difyApp);
     }
 
@@ -52,7 +58,19 @@ public class DifyAppServiceImpl implements DifyAppService {
         if (!difyAppRepository.existsById(difyApp.getId())) {
             throw new RuntimeException("Dify应用不存在");
         }
+        validateSuggestedQuestions(difyApp);
         return difyAppRepository.save(difyApp);
+    }
+
+    /**
+     * 验证开场问题数量
+     * 
+     * @param difyApp Dify应用实例
+     */
+    private void validateSuggestedQuestions(DifyApp difyApp) {
+        if (difyApp.getSuggestedQuestions() != null && difyApp.getSuggestedQuestions().size() > MAX_SUGGESTED_QUESTIONS) {
+            throw new IllegalArgumentException("开场问题数量不能超过" + MAX_SUGGESTED_QUESTIONS + "个");
+        }
     }
 
     @Override

@@ -29,6 +29,7 @@ export default function CreateApplicationPage() {
         outputType: formData.outputType,
         chatModel: formData.chatModel,
         openerContent: formData.openerContent,
+        suggestedQuestions: formData.suggestedQuestions || [], // 添加开场问题数据
         formConfig: formData.formConfig,
         apiKey: formData.apiKey,
         logo: formData.logo,

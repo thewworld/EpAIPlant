@@ -67,6 +67,7 @@ export function FormChatAppDetail({ appConfig, className }: FormChatAppDetailPro
   const [currentFormInputs, setCurrentFormInputs] = useState<Record<string, any>>({});  // 新增：当前表单数据
   const [submittedFiles, setSubmittedFiles] = useState<any[]>([]); // Initialize as empty array
   const [chatUploadedFiles, setChatUploadedFiles] = useState<UploadedFile[]>([]);
+  const chatInputRef = useRef<HTMLTextAreaElement | null>(null); // 添加输入框引用
 
   // 自动滚动到最新消息
   useEffect(() => {
@@ -78,6 +79,21 @@ export function FormChatAppDetail({ appConfig, className }: FormChatAppDetailPro
     // 确保组件完全挂载后再显示输入框
     setMounted(true)
   }, [])
+
+  // 获取输入框引用的useEffect
+  useEffect(() => {
+    if (mounted) {
+      // 获取输入框引用
+      const timer = setTimeout(() => {
+        const inputElement = document.querySelector('.chat-input-area textarea') as HTMLTextAreaElement;
+        if (inputElement) {
+          chatInputRef.current = inputElement;
+        }
+      }, 500);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [mounted]);
 
   // 处理表单字段变化 - 添加字段实时监听功能
   const handleFormFieldChange = (fieldData: Record<string, any>) => {
@@ -784,6 +800,34 @@ export function FormChatAppDetail({ appConfig, className }: FormChatAppDetailPro
       console.log(`Removed chat file: ${fileIdToRemove}`);
   }
 
+  // 处理开场问题点击
+  const handleQuickQuestionClick = (question: string) => {
+    // 将问题设置到输入框并发送
+    if (chatInputRef.current) {
+      chatInputRef.current.value = question;
+      
+      // 聚焦输入框以提供视觉反馈
+      chatInputRef.current.focus();
+      
+      // 添加短暂延迟使用户看到问题出现在输入框中
+      setTimeout(() => {
+        // 自动发送消息
+        handleSendMessage(question);
+        
+        // 平滑滚动到消息输入区域
+        setTimeout(() => {
+          const inputArea = document.querySelector('.chat-input-area');
+          if (inputArea) {
+            inputArea.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        }, 100);
+      }, 150);
+    } else {
+      // 如果无法获取输入框引用，直接发送消息
+      handleSendMessage(question);
+    }
+  };
+
   return (
     <div className={`flex flex-col h-full bg-white dark:bg-[#0f172a] ${className} flex-grow min-h-0`}>
       {/* 应用内容 */}
@@ -835,6 +879,10 @@ export function FormChatAppDetail({ appConfig, className }: FormChatAppDetailPro
               <CombinedIntro
                 messages={appConfig.introMessages}
                 appIcon={getIconSrc()} // 传递应用图标
+                suggestedQuestions={appConfig.suggestedQuestions}
+                onQuestionClick={handleQuickQuestionClick}
+                isLoading={isLoading}
+                multiLine={false} // 使用单行模式显示快捷问题
               />
 
               {/* 聊天消息 */}
@@ -858,7 +906,7 @@ export function FormChatAppDetail({ appConfig, className }: FormChatAppDetailPro
             </div>
 
             {/* 输入区域 - 添加背景阴影以区分 */}
-            <div className="bg-gray-50 dark:bg-[#0c1525] shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] dark:shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.3)] flex-shrink-0">
+            <div className="bg-gray-50 dark:bg-[#0c1525] shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] dark:shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.3)] flex-shrink-0 chat-input-area">
               {mounted && appConfig.type === AppType.CHAT && (
                 <SimpleChatInput
                   onSendMessage={handleSendMessage}

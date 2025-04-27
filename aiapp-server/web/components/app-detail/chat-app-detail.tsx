@@ -6,12 +6,13 @@ import { AppType } from "@/types/app-config"
 import { Message } from "@/components/chat/message"
 import { CombinedIntro } from "@/components/chat/combined-intro"
 import { useToast } from "@/components/ui/use-toast"
-import { Paperclip } from "lucide-react"
+import { Paperclip, Loader2 } from "lucide-react"
 import { getAppIconById, svgToDataUrl } from "@/lib/app-icons"
 import { SimpleChatInput } from "@/components/chat/simple-chat-input"
 import { cn } from "@/lib/utils"
 import { callDifyApi, type DifyApiParams } from "@/lib/dify-api"
 import { API_BASE_URL } from "@/lib/constants"
+import { Button } from "@/components/ui/button"
 
 // 更新 UploadedFile 类型定义
 interface UploadedFile {
@@ -61,17 +62,32 @@ export function ChatAppDetail({ appConfig, className }: ChatAppDetailProps) {
   const [error, setError] = useState<string | null>(null)
   const [uploadedFilesInfo, setUploadedFilesInfo] = useState<UploadedFile[]>([])
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const chatInputRef = useRef<HTMLTextAreaElement | null>(null)
 
   // 自动滚动到最新消息
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages])
 
-  // 在现有的 useEffect 后添加
+  // 确保组件完全挂载后再显示输入框
   useEffect(() => {
-    // 确保组件完全挂载后再显示输入框
     setMounted(true)
   }, [])
+  
+  // 获取输入框引用的useEffect
+  useEffect(() => {
+    if (mounted) {
+      // 获取输入框引用
+      const timer = setTimeout(() => {
+        const inputElement = document.querySelector('.chat-input-area textarea') as HTMLTextAreaElement;
+        if (inputElement) {
+          chatInputRef.current = inputElement;
+        }
+      }, 500);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [mounted]);
 
   // 处理工作流响应
   const handleWorkflowResponse = (data: any) => {
@@ -348,6 +364,34 @@ export function ChatAppDetail({ appConfig, className }: ChatAppDetailProps) {
     return String(content);
   }
 
+  // 处理快捷问题点击
+  const handleQuickQuestionClick = (question: string) => {
+    // 将问题设置到输入框并发送
+    if (chatInputRef.current) {
+      chatInputRef.current.value = question;
+      
+      // 聚焦输入框以提供视觉反馈
+      chatInputRef.current.focus();
+      
+      // 添加短暂延迟使用户看到问题出现在输入框中
+      setTimeout(() => {
+        // 自动发送消息
+        handleSendMessage(question);
+        
+        // 平滑滚动到消息输入区域
+        setTimeout(() => {
+          const inputArea = document.querySelector('.chat-input-area');
+          if (inputArea) {
+            inputArea.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        }, 100);
+      }, 150);
+    } else {
+      // 如果无法获取输入框引用，直接发送消息
+      handleSendMessage(question);
+    }
+  };
+
   return (
     <div className={cn("flex flex-col h-screen bg-white dark:bg-[#0c1525]", className)}>
       {/* 应用内容 */}
@@ -375,6 +419,10 @@ export function ChatAppDetail({ appConfig, className }: ChatAppDetailProps) {
           <CombinedIntro
             messages={appConfig.introMessages}
             appIcon={getIconSrc()}
+            suggestedQuestions={appConfig.suggestedQuestions}
+            onQuestionClick={handleQuickQuestionClick}
+            isLoading={isLoading}
+            multiLine={false}
           />
 
           {/* 聊天消息 */}
@@ -399,7 +447,7 @@ export function ChatAppDetail({ appConfig, className }: ChatAppDetailProps) {
 
         {/* 输入区域 */}
         {mounted && (
-          <div className="sticky bottom-0 left-0 right-0 z-10 border-t border-gray-200 dark:border-[#1e293b] bg-white dark:bg-[#0c1525] shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] dark:shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.3)]">
+          <div className="sticky bottom-0 left-0 right-0 z-10 border-t border-gray-200 dark:border-[#1e293b] bg-white dark:bg-[#0c1525] shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] dark:shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.3)] chat-input-area">
             <SimpleChatInput
               onSendMessage={handleSendMessage}
               appId={appConfig.id}

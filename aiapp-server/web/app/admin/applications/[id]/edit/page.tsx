@@ -21,6 +21,8 @@ interface AppFormData {
   outputType: string;
   chatModel: string;
   openerContent: string;
+  suggestedQuestions: string[]; // 开场问题列表
+  newSuggestedQuestion: string; // 编辑中的开场问题
   maxTokens: number;
   temperature: number;
   topP: number;

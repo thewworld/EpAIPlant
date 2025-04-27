@@ -6,7 +6,7 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    const id = params.id;
+    const id = await params.id;
     const response = await fetch(`${API_BASE_URL}/api/dify-apps/${id}`);
     
     if (!response.ok) {
@@ -29,7 +29,7 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   try {
-    const id = params.id;
+    const id = await params.id;
     const body = await request.json();
     
     const response = await fetch(`${API_BASE_URL}/api/dify-apps/${id}`, {
@@ -60,7 +60,7 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
-    const id = params.id;
+    const id = await params.id;
     
     const response = await fetch(`${API_BASE_URL}/api/dify-apps/${id}`, {
       method: 'DELETE',

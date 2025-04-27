@@ -65,5 +65,6 @@ export interface AppConfig {
   tags?: string[] // 应用标签
   usageCount?: number // 使用次数
   chatModel?: string // 聊天模型类型，sse: 流式响应, block: 阻塞式响应
+  suggestedQuestions?: string[] // 开场推荐问题列表
 }
 

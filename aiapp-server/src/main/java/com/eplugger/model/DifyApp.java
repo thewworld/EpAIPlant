@@ -37,6 +37,14 @@ public class DifyApp {
     private String openerContent;
 
     /**
+     * 开场问题列表
+     */
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "dify_app_suggested_questions", joinColumns = @JoinColumn(name = "app_id"))
+    @Column(name = "question")
+    private List<String> suggestedQuestions = new ArrayList<>();
+
+    /**
      * 应用用途类型, 比如科研, 写作,管理等
      */
     private String category;
