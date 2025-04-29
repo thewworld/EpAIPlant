@@ -342,7 +342,7 @@ export function ChatAppDetail({ appConfig, className }: ChatAppDetailProps) {
 
     const formData = new FormData()
     formData.append('file', file)
-    formData.append('user', 'test_user')
+    formData.append('user', 'user')
 
     try {
       const response = await fetch(

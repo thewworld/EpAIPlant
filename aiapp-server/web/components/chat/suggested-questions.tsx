@@ -26,10 +26,21 @@ export function SuggestedQuestions({
   useEffect(() => {
     setMounted(true)
     
-    // 添加渐现动画效果
+    // 添加渐现动画效果，延迟略长一些以等待DOM完全就绪
     const timer = setTimeout(() => {
       setShowQuestions(true);
-    }, 200); // 稍微快一点，因为这是后续问题
+      
+      // 添加自动滚动到可见区域的效果
+      // 延迟执行滚动，给动画留出开始的时间
+      setTimeout(() => {
+        if (containerRef.current) {
+          containerRef.current.scrollIntoView({ 
+            behavior: 'smooth', 
+            block: 'nearest' 
+          });
+        }
+      }, 100);
+    }, 500); // 增加延迟到500ms，使动画更明显
     
     // 清理定时器
     return () => clearTimeout(timer);
@@ -105,14 +116,15 @@ export function SuggestedQuestions({
   return (
     <div 
       ref={containerRef}
+      id="suggested-questions-container"
       className={cn(
         "w-full pt-2 flex justify-center", // 添加flex和居中对齐
         "transition-all duration-500 ease-in-out",
-        showQuestions ? "opacity-100 transform translate-y-0" : "opacity-0 transform translate-y-2",
+        showQuestions ? "opacity-100 transform translate-y-0" : "opacity-0 transform translate-y-4", // 增加移动距离
         className
       )}
     >
-      <div className="flex flex-wrap justify-center gap-2 max-w-3xl mx-auto"> {/* 使用max-w-3xl限制宽度，居中显示，减小间距 */}
+      <div className="flex flex-wrap justify-center gap-2 max-w-3xl mx-auto animate-pulse-once"> {/* 添加一次性脉冲动画 */}
         {questions.map((question, index) => (
           question && typeof question === 'string' && (
             <Button
@@ -127,7 +139,8 @@ export function SuggestedQuestions({
                 "focus:ring-2 focus:ring-blue-300 focus:ring-offset-1 dark:focus:ring-blue-700",
                 clickedQuestionIndex === index ? "opacity-50 pointer-events-none" : "opacity-100",
                 "text-left justify-start overflow-hidden whitespace-nowrap text-ellipsis",
-                "my-1" // 增加上下间距
+                "my-1", // 增加上下间距
+                "animate-fade-in" // 添加淡入动画
               )}
               style={{
                 maxWidth: "320px", // 减小最大宽度
@@ -136,7 +149,8 @@ export function SuggestedQuestions({
                 textAlign: "left",
                 justifyContent: "flex-start",
                 padding: "3px 10px", // 减小内边距
-                transition: "all 0.3s ease, transform 0.2s ease, opacity 0.3s ease"
+                transition: "all 0.3s ease, transform 0.2s ease, opacity 0.3s ease",
+                animationDelay: `${100 + index * 120}ms` // 按钮依次出现的延迟
               }}
               onClick={() => handleButtonClick(question, index)}
               title={question}
@@ -146,6 +160,27 @@ export function SuggestedQuestions({
           )
         ))}
       </div>
+      <style jsx global>{`
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(8px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        
+        @keyframes pulseOnce {
+          0% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
+          50% { box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.1); }
+          100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
+        }
+        
+        .animate-fade-in {
+          animation: fadeIn 0.5s ease forwards;
+          opacity: 0;
+        }
+        
+        .animate-pulse-once {
+          animation: pulseOnce 1.5s ease-out forwards;
+        }
+      `}</style>
     </div>
   )
 } 

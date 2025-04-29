@@ -150,7 +150,7 @@ export function ChatContainer({
     try {
       const apiParams: DifyApiParams = {
         query: userMessage,
-        user: "test_user",
+        user: "user",
         conversation_id: conversationId || undefined,
         inputs: {},
         files: validFiles,

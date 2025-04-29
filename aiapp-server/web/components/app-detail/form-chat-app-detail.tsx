@@ -212,7 +212,7 @@ export function FormChatAppDetail({ appConfig, className }: FormChatAppDetailPro
       // 构建完整的请求参数，包含表单参数和聊天输入框参数
       const apiParams: DifyApiParams = {
         query: content,
-        user: "test_user",
+        user: "user",
         // 仅当AppType为CHAT时传递会话ID
         conversation_id: shouldUseConversationId ? conversationId : '',
         inputs: combinedInputs, // 使用合并后的表单参数
@@ -453,7 +453,7 @@ export function FormChatAppDetail({ appConfig, className }: FormChatAppDetailPro
       const apiParams: ApiRequestParams = {
         query: formContent.length > 0 ? formContent : " ", // 确保至少有一个空格，避免空字符串
         inputs: processedFormInputs,
-        user: "test_user",
+        user: "user",
         // 仅当AppType为CHAT时传递会话ID
         conversation_id: shouldUseConversationId ? conversationId : '',
         response_mode: appConfig.chatModel === "sse" ? "streaming" : "blocking"
@@ -761,7 +761,7 @@ export function FormChatAppDetail({ appConfig, className }: FormChatAppDetailPro
 
     const formData = new FormData();
     formData.append("file", file);
-    formData.append("user", "test_user");
+    formData.append("user", "user");
 
     try {
       const response = await fetch(
@@ -918,7 +918,7 @@ export function FormChatAppDetail({ appConfig, className }: FormChatAppDetailPro
 
     const formData = new FormData()
     formData.append("file", file)
-    formData.append("user", "test_user") // 替换为实际用户
+    formData.append("user", "user") // 替换为实际用户
 
     try {
       const response = await fetch(
