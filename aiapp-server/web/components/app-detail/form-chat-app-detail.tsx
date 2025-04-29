@@ -637,6 +637,64 @@ export function FormChatAppDetail({ appConfig, className }: FormChatAppDetailPro
     }
   }
 
+  // 渲染消息内容，包括文件预览
+  const renderMessageContent = (message: ChatMessage) => {
+    // 创建一个JSX元素用于显示
+    return (
+      <>
+        <div className="whitespace-pre-wrap">{message.content}</div>
+
+        {/* 文件预览 */}
+        {message.files && message.files.length > 0 && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {message.files.map((file) => (
+              <div key={file.id} className="relative">
+                {file.preview ? (
+                  // 图片预览
+                  <div className="max-w-[200px] max-h-[150px] overflow-hidden rounded-md border border-gray-200 dark:border-gray-700">
+                    <img
+                      src={file.preview || "/placeholder.svg"}
+                      alt={file.name}
+                      className="w-full h-full object-cover"
+                      onClick={() => window.open(file.preview, "_blank")}
+                      style={{ cursor: "pointer" }}
+                    />
+                  </div>
+                ) : (
+                  // 文件链接
+                  <a
+                    href={file.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 p-2 bg-gray-100 dark:bg-gray-800 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700"
+                  >
+                    <Paperclip className="h-4 w-4" />
+                    <span className="text-sm truncate max-w-[150px]">{file.name}</span>
+                  </a>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </>
+    )
+  }
+  
+  // 获取消息纯文本内容用于复制
+  const getMessageTextContent = (message: ChatMessage): string => {
+    let text = message.content || '';
+    
+    // 如果有文件，添加文件信息
+    if (message.files && message.files.length > 0) {
+      text += '\n\n附件文件：\n';
+      message.files.forEach(file => {
+        text += `- ${file.name}\n`;
+      });
+    }
+    
+    return text;
+  }
+
   // 处理复制消息
   const handleCopyMessage = (content: string) => {
     toast({
@@ -701,48 +759,6 @@ export function FormChatAppDetail({ appConfig, className }: FormChatAppDetailPro
   // 确保应用配置包含表单配置
   if (!appConfig.formConfig) {
     return <div>错误：此应用缺少表单配置</div>
-  }
-
-  // 渲染消息内容，包括文件预览
-  const renderMessageContent = (message: ChatMessage) => {
-    return (
-      <>
-        <div className="whitespace-pre-wrap">{message.content}</div>
-
-        {/* 文件预览 */}
-        {message.files && message.files.length > 0 && (
-          <div className="mt-3 flex flex-wrap gap-2">
-            {message.files.map((file) => (
-              <div key={file.id} className="relative">
-                {file.preview ? (
-                  // 图片预览
-                  <div className="max-w-[200px] max-h-[150px] overflow-hidden rounded-md border border-gray-200 dark:border-gray-700">
-                    <img
-                      src={file.preview || "/placeholder.svg"}
-                      alt={file.name}
-                      className="w-full h-full object-cover"
-                      onClick={() => window.open(file.preview, "_blank")}
-                      style={{ cursor: "pointer" }}
-                    />
-                  </div>
-                ) : (
-                  // 文件链接
-                  <a
-                    href={file.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-2 p-2 bg-gray-100 dark:bg-gray-800 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700"
-                  >
-                    <Paperclip className="h-4 w-4" />
-                    <span className="text-sm truncate max-w-[150px]">{file.name}</span>
-                  </a>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-      </>
-    )
   }
 
   // <<< NEW: Handler for form file upload - Updates context automatically >>>
@@ -1019,11 +1035,12 @@ export function FormChatAppDetail({ appConfig, className }: FormChatAppDetailPro
     <div className={`flex flex-col h-full bg-white dark:bg-[#0f172a] ${className} flex-grow min-h-0`}>
       {/* 应用内容 */}
       <div className="flex-1 overflow-hidden flex flex-col min-h-0">
-        <div className="flex flex-1 min-h-0">
-          {/* 左侧表单区域 */}
-          <div className="w-1/3 p-6 border-r border-gray-200 dark:border-[#1e293b] overflow-y-auto flex-shrink-0">
+        {/* 响应式布局 - 在小屏幕上垂直堆叠，在大屏幕上水平排列 */}
+        <div className="flex flex-col md:flex-row flex-1 min-h-0">
+          {/* 左侧表单区域 - 小屏幕占满宽度，大屏幕占1/3 */}
+          <div className="w-full md:w-1/3 p-3 sm:p-4 md:p-5 border-b md:border-b-0 md:border-r border-gray-200 dark:border-[#1e293b] overflow-y-auto flex-shrink-0 md:max-h-screen">
             {appConfig.formConfig && (
-              <div className="space-y-6">
+              <div className="space-y-4">
                 {/* 表单组件 */}
                 <DynamicForm
                   fields={appConfig.formConfig.fields}
@@ -1041,26 +1058,26 @@ export function FormChatAppDetail({ appConfig, className }: FormChatAppDetailPro
             )}
           </div>
 
-          {/* 右侧聊天区域 */}
-          <div className="w-2/3 flex flex-col min-h-0 flex-1">
-            {/* 应用信息 */}
-            <div className="flex flex-col items-center justify-center p-6">
-              <div className="w-16 h-16 rounded-lg bg-gradient-to-br from-purple-500/10 to-pink-500/10 dark:from-purple-500/20 dark:to-pink-500/20 border border-gray-200 dark:border-[#334155] flex items-center justify-center mb-3">
+          {/* 右侧聊天区域 - 小屏幕占满宽度，大屏幕占2/3 */}
+          <div className="w-full md:w-2/3 flex flex-col min-h-0 flex-1">
+            {/* 应用信息 - 减小头部高度 */}
+            <div className="flex flex-col items-center justify-center py-4 px-3">
+              <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-lg bg-gradient-to-br from-purple-500/10 to-pink-500/10 dark:from-purple-500/20 dark:to-pink-500/20 border border-gray-200 dark:border-[#334155] flex items-center justify-center mb-2">
                 <img 
                   src={getIconSrc() || "/icons/app-default.svg"} 
                   alt={appConfig.name} 
-                  className="w-10 h-10 object-contain"
+                  className="w-8 h-8 sm:w-10 sm:h-10 object-contain"
                   onError={(e) => {
                     e.currentTarget.src = "/icons/app-default.svg";
                   }}
                 />
               </div>
-              <h2 className="text-xl font-bold text-gray-800 dark:text-white mb-1">{appConfig.name}</h2>
-              <p className="text-gray-600 dark:text-gray-300 text-center text-sm">{appConfig.description}</p>
+              <h2 className="text-lg sm:text-xl font-bold text-gray-800 dark:text-white mb-1">{appConfig.name}</h2>
+              <p className="text-gray-600 dark:text-gray-300 text-center text-xs sm:text-sm max-w-md">{appConfig.description}</p>
             </div>
 
-            {/* 聊天区域 */}
-            <div className="flex-1 overflow-y-auto min-h-0">
+            {/* 聊天区域 - 使用更小的内边距 */}
+            <div className="flex-1 overflow-y-auto min-h-0 px-2 sm:px-3 md:px-4">
               {/* 合并的介绍消息 */}
               <CombinedIntro
                 messages={appConfig.introMessages}
@@ -1079,6 +1096,7 @@ export function FormChatAppDetail({ appConfig, className }: FormChatAppDetailPro
                     id={message.id}
                     role={message.role}
                     content={renderMessageContent(message)}
+                    textContent={getMessageTextContent(message)}
                     timestamp={message.timestamp}
                     appIcon={message.role === "assistant" ? getIconSrc() : undefined}
                     onCopy={handleCopyMessage}
@@ -1110,7 +1128,7 @@ export function FormChatAppDetail({ appConfig, className }: FormChatAppDetailPro
                 <SimpleChatInput
                   onSendMessage={handleSendMessage}
                   isLoading={isLoading}
-                  placeholder="对生成结果不满意？输入修改意见..."
+                  placeholder="请输入您的问题..."
                   appId={appConfig.id}
                   onFileUpload={handleChatFileUpload}
                   uploadedFiles={chatUploadedFiles}

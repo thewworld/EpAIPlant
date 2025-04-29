@@ -263,7 +263,7 @@ export default function ChatPage() {
               <div className="p-3">
                 <Textarea
                   ref={textareaRef}
-                  placeholder="有问题，尽管问，shift+回车换行，回车发送"
+                  placeholder="请输入您的问题..."
                   className="w-full border-0 bg-transparent focus-visible:ring-0 resize-none p-0 min-h-[40px] max-h-[200px] placeholder:text-gray-400 text-gray-700"
                   value={input}
                   onChange={handleInputChange}

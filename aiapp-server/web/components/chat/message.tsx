@@ -1,6 +1,6 @@
 "use client"
 
-import type React from "react"
+import React from "react"
 
 import { useState } from "react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -14,6 +14,7 @@ export interface MessageProps {
   id?: string
   role: "user" | "assistant" | "system"
   content: string | React.ReactNode
+  textContent?: string // 添加可选的纯文本内容属性，用于复制
   icon?: string
   timestamp?: Date
   isLoading?: boolean
@@ -29,6 +30,7 @@ export function Message({
   id,
   role,
   content,
+  textContent,
   icon,
   timestamp,
   isLoading,
@@ -49,26 +51,30 @@ export function Message({
 
   // 处理复制内容
   const handleCopy = () => {
-    let textToCopy = '';
+    // 优先使用传入的textContent
+    let textToCopy = textContent || '';
     
-    if (typeof content === "string") {
-      textToCopy = content;
-    } else if (content && typeof content === "object") {
-      if (React.isValidElement(content)) {
-        // 如果是 React 元素，尝试获取其文本内容
-        const tempDiv = document.createElement("div");
-        tempDiv.innerHTML = content.toString();
-        textToCopy = tempDiv.textContent || tempDiv.innerText || "";
-      } else {
-        // 如果是普通对象，转换为字符串
-        try {
-          textToCopy = JSON.stringify(content, null, 2);
-        } catch (e) {
-          textToCopy = String(content);
+    // 如果没有提供textContent，则尝试从content中提取
+    if (!textToCopy) {
+      if (typeof content === "string") {
+        textToCopy = content;
+      } else if (content && typeof content === "object") {
+        if (React.isValidElement(content)) {
+          // 如果是 React 元素，尝试获取其文本内容
+          const tempDiv = document.createElement("div");
+          tempDiv.innerHTML = content.toString();
+          textToCopy = tempDiv.textContent || tempDiv.innerText || "";
+        } else {
+          // 如果是普通对象，转换为字符串
+          try {
+            textToCopy = JSON.stringify(content, null, 2);
+          } catch (e) {
+            textToCopy = String(content);
+          }
         }
+      } else {
+        textToCopy = String(content || '');
       }
-    } else {
-      textToCopy = String(content || '');
     }
 
     navigator.clipboard.writeText(textToCopy).then(() => {
@@ -101,13 +107,13 @@ export function Message({
   return (
     <div
       className={cn(
-        "group py-4 flex items-start px-4 md:px-6 lg:px-8 max-w-3xl mx-auto",
+        "group py-3 flex items-start px-2 sm:px-3 md:px-5 lg:px-6 max-w-4xl mx-auto",
         isUser ? "justify-end" : "justify-start",
       )}
     >
-      <div className={cn("flex max-w-[80%]", isUser ? "flex-row-reverse" : "flex-row", "items-start gap-x-3")}>
+      <div className={cn("flex max-w-[90%] md:max-w-[85%]", isUser ? "flex-row-reverse" : "flex-row", "items-start gap-x-2")}>
         {/* 头像 */}
-        <Avatar className={cn("h-8 w-8 flex-shrink-0 mt-0.5", isUser ? "ml-2" : "mr-2")}>
+        <Avatar className={cn("h-7 w-7 sm:h-8 sm:w-8 flex-shrink-0 mt-0.5", isUser ? "ml-1 sm:ml-2" : "mr-1 sm:mr-2")}>
           {isUser ? (
             // 用户头像 - 使用新的默认用户头像
             <AvatarImage src={userAvatarUrl} alt="User" />
@@ -121,7 +127,6 @@ export function Message({
                   className="w-full h-full object-contain rounded-full"
                   onError={(e) => {
                     // 图标加载失败时使用默认图标
-                    console.error('头像图标加载失败:', e);
                     e.currentTarget.src = "/icons/app-default.svg";
                   }}
                 />
@@ -163,13 +168,13 @@ export function Message({
         {/* 消息内容 */}
         <div
           className={cn(
-            "overflow-hidden rounded-lg p-3",
+            "overflow-hidden rounded-lg py-2 px-3",
             isUser
               ? "bg-gray-200 text-gray-800 dark:bg-gray-700 dark:text-gray-100"
               : "bg-[#f5f3ff] text-gray-800 dark:bg-[#1e1b4b]/20 dark:text-gray-200",
           )}
         >
-          <div className="prose prose-sm max-w-none">
+          <div className="prose prose-sm max-w-none break-words">
             {icon && role === "system" && (
               <div className="flex items-start gap-2 mb-1">
                 <span className="text-lg">{icon}</span>
@@ -179,7 +184,7 @@ export function Message({
             {timestamp && (
               <div
                 className={cn(
-                  "text-xs mt-2",
+                  "text-xs mt-1.5",
                   isUser ? "text-gray-500 dark:text-gray-400" : "text-gray-500 dark:text-gray-400",
                 )}
               >
@@ -193,15 +198,15 @@ export function Message({
 
           {/* 交互按钮 */}
           {role === "assistant" && !isLoading && !isStreaming && (
-            <div className="flex items-center mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
+            <div className="flex items-center mt-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Button variant="ghost" size="sm" className="h-7 rounded-md" onClick={handleCopy}>
+                    <Button variant="ghost" size="sm" className="h-6 rounded-md" onClick={handleCopy}>
                       {copied ? (
-                        <CheckCheck className="h-3.5 w-3.5 mr-1 text-green-500" />
+                        <CheckCheck className="h-3 w-3 mr-1 text-green-500" />
                       ) : (
-                        <Copy className="h-3.5 w-3.5 mr-1 text-gray-500 dark:text-gray-400" />
+                        <Copy className="h-3 w-3 mr-1 text-gray-500 dark:text-gray-400" />
                       )}
                       <span className="text-xs">{copied ? "已复制" : "复制"}</span>
                     </Button>
@@ -218,10 +223,10 @@ export function Message({
                     <Button
                       variant="ghost"
                       size="sm"
-                      className={cn("h-7 rounded-md", liked && "text-green-500")}
+                      className={cn("h-6 rounded-md", liked && "text-green-500")}
                       onClick={handleLike}
                     >
-                      <ThumbsUp className="h-3.5 w-3.5 mr-1" />
+                      <ThumbsUp className="h-3 w-3 mr-1" />
                       <span className="text-xs">有用</span>
                     </Button>
                   </TooltipTrigger>
@@ -237,10 +242,10 @@ export function Message({
                     <Button
                       variant="ghost"
                       size="sm"
-                      className={cn("h-7 rounded-md", disliked && "text-red-500")}
+                      className={cn("h-6 rounded-md", disliked && "text-red-500")}
                       onClick={handleDislike}
                     >
-                      <ThumbsDown className="h-3.5 w-3.5 mr-1" />
+                      <ThumbsDown className="h-3 w-3 mr-1" />
                       <span className="text-xs">无用</span>
                     </Button>
                   </TooltipTrigger>

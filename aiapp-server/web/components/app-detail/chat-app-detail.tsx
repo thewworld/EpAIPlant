@@ -514,23 +514,23 @@ export function ChatAppDetail({ appConfig, className }: ChatAppDetailProps) {
       {/* 应用内容 */}
       <div className="flex flex-col flex-1 min-h-0">
         {/* 应用信息 */}
-        <div className="flex flex-col items-center justify-center py-8 px-4 md:px-6 lg:px-8 flex-shrink-0">
-          <div className="w-20 h-20 rounded-lg bg-gradient-to-br from-purple-500/10 to-pink-500/10 dark:from-purple-500/20 dark:to-pink-500/20 border border-gray-200 dark:border-[#334155] flex items-center justify-center mb-4">
+        <div className="flex flex-col items-center justify-center py-5 sm:py-6 px-3 sm:px-4 md:px-5 flex-shrink-0">
+          <div className="w-16 h-16 sm:w-18 sm:h-18 rounded-lg bg-gradient-to-br from-purple-500/10 to-pink-500/10 dark:from-purple-500/20 dark:to-pink-500/20 border border-gray-200 dark:border-[#334155] flex items-center justify-center mb-3">
             <img 
               src={getIconSrc() || "/icons/app-default.svg"} 
               alt={appConfig.name} 
-              className="w-12 h-12 object-contain"
+              className="w-10 h-10 object-contain"
               onError={(e) => {
                 e.currentTarget.src = "/icons/app-default.svg";
               }} 
             />
           </div>
-          <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-2">{appConfig.name}</h2>
-          <p className="text-gray-600 dark:text-gray-300 text-center max-w-md">{appConfig.description}</p>
+          <h2 className="text-xl font-bold text-gray-800 dark:text-white mb-1.5">{appConfig.name}</h2>
+          <p className="text-gray-600 dark:text-gray-300 text-center text-sm max-w-md">{appConfig.description}</p>
         </div>
 
         {/* 聊天区域 */}
-        <div className="flex-1 overflow-y-auto px-4 md:px-6 lg:px-8 min-h-0">
+        <div className="flex-1 overflow-y-auto px-2 sm:px-3 md:px-5 min-h-0">
           {/* 合并的介绍消息 */}
           <CombinedIntro
             messages={appConfig.introMessages}
@@ -549,6 +549,7 @@ export function ChatAppDetail({ appConfig, className }: ChatAppDetailProps) {
                 id={message.id}
                 role={message.role}
                 content={renderMessageContent(message.content)}
+                textContent={message.content}
                 timestamp={message.timestamp}
                 appIcon={message.role === "assistant" ? getIconSrc() : undefined}
                 onCopy={handleCopyMessage}
@@ -586,7 +587,7 @@ export function ChatAppDetail({ appConfig, className }: ChatAppDetailProps) {
               uploadedFiles={uploadedFilesInfo}
               onRemoveFile={handleFileRemove}
               isLoading={isLoading}
-              placeholder="有问题，尽管问..."
+              placeholder="请输入您的问题..."
             />
           </div>
         )}

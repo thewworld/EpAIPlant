@@ -36,7 +36,7 @@ interface SimpleChatInputProps {
 export function SimpleChatInput({
   onSendMessage,
   isLoading = false,
-  placeholder = "有问题，尽管问，shift+回车换行，回车发送",
+  placeholder = "请输入您的问题...",
   className,
   appId,
   onFileUpload,
@@ -103,23 +103,23 @@ export function SimpleChatInput({
   }
 
   return (
-    <div className={`px-4 md:px-6 lg:px-8 py-4 bg-white dark:bg-[#0f172a] ${className}`}>
-      <div className="flex flex-col max-w-3xl mx-auto">
+    <div className={`px-2 sm:px-4 md:px-5 py-3 bg-white dark:bg-[#0f172a] ${className}`}>
+      <div className="flex flex-col max-w-4xl mx-auto">
         {uploadedFiles.length > 0 && (
-          <div className="flex flex-wrap gap-2 mb-3 ml-11">
+          <div className="flex flex-wrap gap-2 mb-2 ml-9 sm:ml-11">
             {uploadedFiles.map((file) => (
               <div
                 key={file.id}
-                className="relative group bg-gray-100 dark:bg-gray-800 rounded-md p-1 flex items-center gap-2"
+                className="relative group bg-gray-100 dark:bg-gray-800 rounded-md p-1 flex items-center gap-1.5"
               >
                 {file.uploading && (
-                   <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mr-1"></div>
+                   <div className="w-3.5 h-3.5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mr-1"></div>
                 )}
                 {file.error && (
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger>
-                         <X className="w-4 h-4 text-red-500 mr-1" />
+                         <X className="w-3.5 h-3.5 text-red-500 mr-1" />
                       </TooltipTrigger>
                       <TooltipContent side="top">
                         <p className="text-xs text-red-600">{file.error}</p>
@@ -129,7 +129,7 @@ export function SimpleChatInput({
                 )}
                 {!file.uploading && !file.error && (
                     file.type.startsWith("image/") ? (
-                    <div className="w-8 h-8 relative overflow-hidden rounded">
+                    <div className="w-7 h-7 relative overflow-hidden rounded">
                       <img
                         src={file.preview || file.url || "/placeholder.svg"}
                         alt={file.name}
@@ -137,7 +137,7 @@ export function SimpleChatInput({
                       />
                     </div>
                   ) : (
-                    <Paperclip className="w-4 h-4 text-gray-500" />
+                    <Paperclip className="w-3.5 h-3.5 text-gray-500" />
                   )
                 )}
                 <span className="text-xs text-gray-700 dark:text-gray-300 max-w-[120px] truncate">{file.name}</span>
@@ -153,8 +153,8 @@ export function SimpleChatInput({
           </div>
         )}
 
-        <div className="flex items-start gap-x-3">
-          <Avatar className="h-8 w-8 flex-shrink-0 mt-1">
+        <div className="flex items-start gap-x-2 sm:gap-x-3">
+          <Avatar className="h-7 w-7 sm:h-8 sm:w-8 flex-shrink-0 mt-0.5 sm:mt-1">
             <AvatarImage src={userAvatarUrl} alt="User" />
             <AvatarFallback className="bg-blue-600 dark:bg-blue-700 text-white">U</AvatarFallback>
           </Avatar>
@@ -164,7 +164,7 @@ export function SimpleChatInput({
               <Textarea
                 ref={textareaRef}
                 placeholder={placeholder}
-                className="w-full resize-none min-h-[40px] max-h-[200px] border-0 focus-visible:ring-0 focus-visible:ring-offset-0 pb-12"
+                className="w-full resize-none min-h-[36px] max-h-[180px] border-0 focus-visible:ring-0 focus-visible:ring-offset-0 py-2 px-3 pb-10"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
@@ -172,7 +172,7 @@ export function SimpleChatInput({
                 rows={1}
               />
 
-              <div className="absolute bottom-2 right-2 flex items-center">
+              <div className="absolute bottom-1 right-1.5 flex items-center">
                 <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileSelect} multiple />
                 <input
                   type="file"
@@ -183,7 +183,7 @@ export function SimpleChatInput({
                   multiple
                 />
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5">
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger asChild>
@@ -191,10 +191,10 @@ export function SimpleChatInput({
                           type="button"
                           size="icon"
                           variant="ghost"
-                          className="h-8 w-8 rounded-full text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
+                          className="h-7 w-7 rounded-full text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
                           onClick={() => fileInputRef.current?.click()}
                         >
-                          <Paperclip className="h-4 w-4" />
+                          <Paperclip className="h-3.5 w-3.5" />
                         </Button>
                       </TooltipTrigger>
                       <TooltipContent side="top">
@@ -210,10 +210,10 @@ export function SimpleChatInput({
                           type="button"
                           size="icon"
                           variant="ghost"
-                          className="h-8 w-8 rounded-full text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
+                          className="h-7 w-7 rounded-full text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
                           onClick={() => imageInputRef.current?.click()}
                         >
-                          <Image className="h-4 w-4" />
+                          <Image className="h-3.5 w-3.5" />
                         </Button>
                       </TooltipTrigger>
                       <TooltipContent side="top">
@@ -224,11 +224,11 @@ export function SimpleChatInput({
 
                   <Button
                     size="icon"
-                    className="h-8 w-8 rounded-full bg-purple-600 hover:bg-purple-700 dark:bg-purple-600 dark:hover:bg-purple-700 text-white"
+                    className="h-7 w-7 rounded-full bg-purple-600 hover:bg-purple-700 dark:bg-purple-600 dark:hover:bg-purple-700 text-white"
                     onClick={handleSendMessage}
                     disabled={(!input.trim() && uploadedFiles.length === 0) || isLoading}
                   >
-                    {isLoading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                    {isLoading ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
                   </Button>
                 </div>
               </div>

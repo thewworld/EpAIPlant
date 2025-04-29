@@ -21,7 +21,7 @@ interface ChatInputProps {
 export function ChatInput({
   onSendMessage,
   isLoading = false,
-  placeholder = "有问题，尽管问，shift+回车换行，回车发送",
+  placeholder = "请输入您的问题...",
   modelName = "Gemini 2.0 Flash",
   enableWebSearch = false,
   className,
