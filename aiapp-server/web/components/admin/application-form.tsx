@@ -77,6 +77,7 @@ const defaultFormData = {
   chatModel: "sse",
   openerContent: "您好，我是AI助手，有什么可以帮您解决的问题？",
   suggestedQuestions: [] as string[],
+  suggestAfterAnswer: false, // 是否启用回答后推荐问题
   newSuggestedQuestion: "",  // 用于临时存储正在编辑的开场问题
   maxTokens: 2048,
   temperature: 0.7,
@@ -1088,6 +1089,8 @@ export function ApplicationForm({ mode, id, initialData, isLoading = false, isUs
         tags: data.tags || prev.tags,
         // 添加开场问题数据
         suggestedQuestions: data.suggestedQuestions || prev.suggestedQuestions,
+        // 同步回答后推荐问题设置
+        suggestAfterAnswer: data.suggestAfterAnswer !== undefined ? data.suggestAfterAnswer : prev.suggestAfterAnswer,
         // 重置新问题输入框
         newSuggestedQuestion: ''
       }))
@@ -1607,6 +1610,21 @@ export function ApplicationForm({ mode, id, initialData, isLoading = false, isUs
                         </div>
                       )}
                     </div>
+                  </div>
+                  
+                  {/* 回答后推荐问题开关 */}
+                  <div className="space-y-2 mt-4">
+                    <div className="flex justify-between items-center">
+                      <Label htmlFor="suggestAfterAnswer" className="cursor-pointer">启用回答后推荐问题</Label>
+                      <Switch
+                        id="suggestAfterAnswer"
+                        checked={formData.suggestAfterAnswer}
+                        onCheckedChange={(checked) => handleSwitchChange("suggestAfterAnswer", checked)}
+                      />
+                    </div>
+                    <p className="text-xs text-gray-500">
+                      开启后，AI在回答完用户问题后将自动提供相关的推荐问题
+                    </p>
                   </div>
                 </TabsContent>
 

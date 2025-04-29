@@ -45,6 +45,12 @@ public class DifyApp {
     private List<String> suggestedQuestions = new ArrayList<>();
 
     /**
+     * 是否启用回答后推荐问题
+     */
+    @Column(name = "suggest_after_answer")
+    private Boolean suggestAfterAnswer = false;
+
+    /**
      * 应用用途类型, 比如科研, 写作,管理等
      */
     private String category;

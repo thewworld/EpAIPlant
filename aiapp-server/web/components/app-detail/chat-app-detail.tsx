@@ -10,9 +10,10 @@ import { Paperclip, Loader2 } from "lucide-react"
 import { getAppIconById, svgToDataUrl } from "@/lib/app-icons"
 import { SimpleChatInput } from "@/components/chat/simple-chat-input"
 import { cn } from "@/lib/utils"
-import { callDifyApi, type DifyApiParams } from "@/lib/dify-api"
+import { callDifyApi, type DifyApiParams, fetchSuggestedQuestions } from "@/lib/dify-api"
 import { API_BASE_URL } from "@/lib/constants"
 import { Button } from "@/components/ui/button"
+import { SuggestedQuestions } from "@/components/chat/suggested-questions"
 
 // 更新 UploadedFile 类型定义
 interface UploadedFile {
@@ -63,6 +64,14 @@ export function ChatAppDetail({ appConfig, className }: ChatAppDetailProps) {
   const [uploadedFilesInfo, setUploadedFilesInfo] = useState<UploadedFile[]>([])
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const chatInputRef = useRef<HTMLTextAreaElement | null>(null)
+  // 添加会话ID状态变量
+  const [conversationId, setConversationId] = useState<string>('');
+  // 添加建议问题状态
+  const [suggestedQuestions, setSuggestedQuestions] = useState<string[]>([]);
+  // 添加最后消息ID状态
+  const [lastMessageId, setLastMessageId] = useState<string | null>(null);
+  // 添加正在获取建议问题的标志
+  const [isFetchingSuggestions, setIsFetchingSuggestions] = useState<boolean>(false);
 
   // 自动滚动到最新消息
   useEffect(() => {
@@ -121,10 +130,41 @@ export function ChatAppDetail({ appConfig, className }: ChatAppDetailProps) {
     })
   }
 
+  // 获取回答后的建议问题
+  const fetchSuggestedQuestionsAfterAnswer = async (messageId: string) => {
+    // 如果不是聊天类型应用，则不获取建议问题
+    if (appConfig.type !== AppType.CHAT || !messageId || isFetchingSuggestions) {
+      return;
+    }
+    
+    try {
+      // 设置标志位防止重复请求
+      setIsFetchingSuggestions(true);
+      
+      const questions = await fetchSuggestedQuestions(
+        appConfig.id,
+        messageId,
+        'user' // 用户标识，这里使用固定值，实际应用中可能需要从用户配置或会话中获取
+      );
+      
+      // 更新建议问题状态
+      setSuggestedQuestions(questions);
+    } catch (error) {
+      setSuggestedQuestions([]);
+    } finally {
+      // 重置标志位
+      setIsFetchingSuggestions(false);
+    }
+  };
+
   // 处理发送消息
   const handleSendMessage = async (message: string, files?: UploadedFile[]) => {
     setIsLoading(true)
     setError(null)
+    // 清空之前的建议问题
+    setSuggestedQuestions([])
+    // 重置获取建议问题的标志
+    setIsFetchingSuggestions(false)
 
     // 添加用户消息到消息列表
     const userMessage: ChatMessage = {
@@ -146,12 +186,21 @@ export function ChatAppDetail({ appConfig, className }: ChatAppDetailProps) {
       isStreaming: true
     }])
 
+    // 流式响应中最后一个有效的会话ID
+    let lastReceivedConversationId: string | null = null;
+    // 存储识别SSE数据流中当前消息ID，用于确认会话ID来自同一条消息
+    let currentMessageId: string | null = null;
+
     try {
+      // 判断是否使用会话ID (仅当AppType为CHAT时使用)
+      const shouldUseConversationId = appConfig.type === AppType.CHAT && conversationId !== '';
+      
       const response = await callDifyApi(
         {
           query: message,
           user: 'user',
-          conversation_id: '',
+          // 仅当AppType为CHAT时传递会话ID
+          conversation_id: shouldUseConversationId ? conversationId : '',
           inputs: {},
           response_mode: appConfig.chatModel === 'sse' ? 'streaming' : 'blocking',
           files: files?.filter(f => f.uploadFileId && !f.error).map(file => ({
@@ -167,7 +216,40 @@ export function ChatAppDetail({ appConfig, className }: ChatAppDetailProps) {
           chatModel: appConfig.chatModel || 'sse',
         },
         // 流式数据处理
-        (content) => {
+        (content, rawData) => {
+          // 处理流式响应中的会话ID (仅当AppType为CHAT时)
+          if (appConfig.type === AppType.CHAT && rawData) {
+            try {
+              const data = JSON.parse(rawData);
+              
+              // 检查是否有会话过期错误
+              if (data.error && data.error_code === "SESSION_EXPIRED") {
+                setConversationId('');
+                toast({
+                  title: "会话已重置",
+                  description: "之前的会话已过期，已为您开始新对话",
+                  variant: "default",
+                });
+              }
+              
+              // 提取会话ID和消息ID
+              if (data.conversation_id) {
+                // 如果是新消息或与当前消息ID匹配，则更新最后接收的会话ID
+                if (!currentMessageId || (data.message_id && data.message_id === currentMessageId)) {
+                  lastReceivedConversationId = data.conversation_id;
+                  currentMessageId = data.message_id || currentMessageId;
+                  
+                  // 更新最后消息ID
+                  if (data.message_id) {
+                    setLastMessageId(data.message_id);
+                  }
+                }
+              }
+            } catch (e) {
+              // 解析错误不影响主流程
+            }
+          }
+          
           setMessages(prev => prev.map(msg =>
             msg.id === thinkingMessageId
               ? { ...msg, content, isStreaming: true }
@@ -180,6 +262,16 @@ export function ChatAppDetail({ appConfig, className }: ChatAppDetailProps) {
         },
         // 流式结束处理
         () => {
+          // 流式响应结束时，更新会话ID (仅在AppType为CHAT时)
+          if (appConfig.type === AppType.CHAT && lastReceivedConversationId) {
+            setConversationId(lastReceivedConversationId);
+            
+            // 如果有最后消息ID，获取建议问题 - 仅在流式响应模式时调用
+            if (currentMessageId && appConfig.chatModel === 'sse') {
+              fetchSuggestedQuestionsAfterAnswer(currentMessageId);
+            }
+          }
+          
           setMessages(prev => prev.map(msg =>
             msg.id === thinkingMessageId
               ? { ...msg, isStreaming: false }
@@ -195,10 +287,33 @@ export function ChatAppDetail({ appConfig, className }: ChatAppDetailProps) {
             ? { ...msg, content: response.content, isStreaming: false }
             : msg
         ))
+        
+        // 处理阻塞式响应的会话ID (仅当AppType为CHAT时)
+        if (appConfig.type === AppType.CHAT && response.conversationId) {
+          setConversationId(response.conversationId);
+          
+          // 如果有消息ID，则获取建议问题 - 仅在阻塞响应模式时调用
+          if (response.messageId && appConfig.chatModel !== 'sse') {
+            setLastMessageId(response.messageId);
+            fetchSuggestedQuestionsAfterAnswer(response.messageId);
+          }
+        }
+        
         setIsLoading(false)
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : '发送消息时出错'
+      
+      // 检查是否是会话过期错误
+      if (errorMessage.includes("SESSION_EXPIRED")) {
+        setConversationId('');
+        toast({
+          title: "会话已重置",
+          description: "之前的会话已过期，已为您开始新对话",
+          variant: "default",
+        });
+      }
+      
       setError(errorMessage)
       toast({
         title: "错误",
@@ -338,7 +453,6 @@ export function ChatAppDetail({ appConfig, className }: ChatAppDetailProps) {
       try {
         return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(appConfig.logo)}`
       } catch (e) {
-        console.error('Logo编码错误:', e);
         // 编码失败时使用默认图标
         return '/icons/app-default.svg';
       }
@@ -392,6 +506,9 @@ export function ChatAppDetail({ appConfig, className }: ChatAppDetailProps) {
     }
   };
 
+  // 只在开发环境下显示调试信息
+  const isDevMode = process.env.NODE_ENV === 'development';
+
   return (
     <div className={cn("flex flex-col h-screen bg-white dark:bg-[#0c1525]", className)}>
       {/* 应用内容 */}
@@ -404,7 +521,6 @@ export function ChatAppDetail({ appConfig, className }: ChatAppDetailProps) {
               alt={appConfig.name} 
               className="w-12 h-12 object-contain"
               onError={(e) => {
-                console.error('应用图标加载失败:', e);
                 e.currentTarget.src = "/icons/app-default.svg";
               }} 
             />
@@ -441,6 +557,21 @@ export function ChatAppDetail({ appConfig, className }: ChatAppDetailProps) {
                 isStreaming={message.isStreaming}
               />
             ))}
+            
+            {/* 显示回答后的建议问题 */}
+            {suggestedQuestions.length > 0 && !isLoading && messages.length > 0 && (
+              <div className="mt-2 mb-4 border-t border-gray-100 dark:border-gray-800 relative">
+                <div className="absolute top-0 left-1/2 transform -translate-y-1/2 -translate-x-1/2 bg-white dark:bg-[#0c1525] px-3 py-0.5 text-xs text-gray-500 dark:text-gray-400 z-10 rounded-full border border-gray-100 dark:border-gray-700">
+                  试着问问
+                </div>
+                <SuggestedQuestions
+                  questions={suggestedQuestions}
+                  onQuestionClick={handleQuickQuestionClick}
+                  className="mt-3"
+                />
+              </div>
+            )}
+            
             <div ref={messagesEndRef} />
           </div>
         </div>

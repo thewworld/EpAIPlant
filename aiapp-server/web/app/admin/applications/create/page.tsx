@@ -30,6 +30,7 @@ export default function CreateApplicationPage() {
         chatModel: formData.chatModel,
         openerContent: formData.openerContent,
         suggestedQuestions: formData.suggestedQuestions || [], // 添加开场问题数据
+        suggestAfterAnswer: formData.suggestAfterAnswer, // 是否启用回答后推荐问题
         formConfig: formData.formConfig,
         apiKey: formData.apiKey,
         logo: formData.logo,

@@ -10,8 +10,9 @@ import { useToast } from "@/components/ui/use-toast"
 import { Paperclip } from "lucide-react"
 import { getAppIconById, svgToDataUrl } from "@/lib/app-icons"
 import { SimpleChatInput } from "@/components/chat/simple-chat-input"
-import { callDifyApi, type DifyApiParams, type DifyApiResponse } from "@/lib/dify-api"
+import { callDifyApi, type DifyApiParams, type DifyApiResponse, fetchSuggestedQuestions } from "@/lib/dify-api"
 import { API_BASE_URL } from "@/lib/constants"
+import { SuggestedQuestions } from "@/components/chat/suggested-questions"
 
 // 添加上传文件类型定义
 interface UploadedFile {
@@ -68,6 +69,16 @@ export function FormChatAppDetail({ appConfig, className }: FormChatAppDetailPro
   const [submittedFiles, setSubmittedFiles] = useState<any[]>([]); // Initialize as empty array
   const [chatUploadedFiles, setChatUploadedFiles] = useState<UploadedFile[]>([]);
   const chatInputRef = useRef<HTMLTextAreaElement | null>(null); // 添加输入框引用
+  // 添加会话ID状态变量
+  const [conversationId, setConversationId] = useState<string>('');
+  // 添加建议问题状态
+  const [suggestedQuestions, setSuggestedQuestions] = useState<string[]>([]);
+  // 添加最后消息ID状态
+  const [lastMessageId, setLastMessageId] = useState<string | null>(null);
+  // 添加正在获取建议问题的标志
+  const [isFetchingSuggestions, setIsFetchingSuggestions] = useState<boolean>(false);
+  // 添加聊天文件状态
+  const [chatFiles, setChatFiles] = useState<UploadedFile[]>([]);
 
   // 自动滚动到最新消息
   useEffect(() => {
@@ -104,10 +115,36 @@ export function FormChatAppDetail({ appConfig, className }: FormChatAppDetailPro
     }));
   };
 
+  // 添加获取建议问题函数
+  const fetchSuggestedQuestionsAfterAnswer = async (messageId: string) => {
+    // 如果不是聊天类型应用，则不获取建议问题
+    if (!messageId || isFetchingSuggestions) {
+      return;
+    }
+    
+    try {
+      // 设置标志位防止重复请求
+      setIsFetchingSuggestions(true);
+      
+      const questions = await fetchSuggestedQuestions(
+        appConfig.id,
+        messageId,
+        'user' // 用户标识，这里使用固定值，实际应用中可能需要从用户配置或会话中获取
+      );
+      
+      // 更新建议问题状态
+      setSuggestedQuestions(questions);
+    } catch (error) {
+      setSuggestedQuestions([]);
+    } finally {
+      // 重置标志位
+      setIsFetchingSuggestions(false);
+    }
+  };
+
   // 处理发送消息 (聊天输入框)
   const handleSendMessage = async (content: string) => {
     if (!content.trim() && chatUploadedFiles.filter(f => !f.error && f.uploadFileId).length === 0) {
-      console.log("发送消息: 内容为空且没有有效文件，终止发送")
       return
     }
 
@@ -130,6 +167,10 @@ export function FormChatAppDetail({ appConfig, className }: FormChatAppDetailPro
 
     setMessages(prev => [...prev, userMessage])
     setIsLoading(true)
+    // 清空之前的建议问题
+    setSuggestedQuestions([])
+    // 重置获取建议问题的标志
+    setIsFetchingSuggestions(false)
 
     // 立即添加一个正在思考的助手消息
     const thinkingMessageId = `thinking-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
@@ -142,7 +183,14 @@ export function FormChatAppDetail({ appConfig, className }: FormChatAppDetailPro
     }
     setMessages(prev => [...prev, thinkingMessage])
 
+    // 流式响应中最后一个有效的会话ID和消息ID
+    let lastReceivedConversationId: string | null = null;
+    let currentMessageId: string | null = null;
+
     try {
+      // 判断是否使用会话ID (仅当AppType为CHAT时使用)
+      const shouldUseConversationId = appConfig.type === AppType.CHAT && conversationId !== '';
+
       // 组合使用已提交的表单参数和当前表单状态
       const combinedInputs = {
         ...(submittedInputs || {}),
@@ -165,15 +213,13 @@ export function FormChatAppDetail({ appConfig, className }: FormChatAppDetailPro
       const apiParams: DifyApiParams = {
         query: content,
         user: "test_user",
-        conversation_id: "",
+        // 仅当AppType为CHAT时传递会话ID
+        conversation_id: shouldUseConversationId ? conversationId : '',
         inputs: combinedInputs, // 使用合并后的表单参数
         files: chatFilesToSend, // 聊天输入框上传的文件
         response_mode: appConfig.chatModel === "sse" ? "streaming" : "blocking",
         auto_generate_name: true,
       }
-
-      // 打印请求参数用于调试
-      console.log("发送请求参数:", JSON.stringify(apiParams));
 
       const response = await callDifyApi(
         apiParams,
@@ -183,7 +229,40 @@ export function FormChatAppDetail({ appConfig, className }: FormChatAppDetailPro
           chatModel: appConfig.chatModel || "block",
         },
         // 流式数据处理
-        (content) => {
+        (content, rawData) => {
+          // 处理流式响应中的会话ID (仅当AppType为CHAT时)
+          if (appConfig.type === AppType.CHAT && rawData) {
+            try {
+              const data = JSON.parse(rawData);
+              
+              // 检查是否有会话过期错误
+              if (data.error && data.error_code === "SESSION_EXPIRED") {
+                setConversationId('');
+                toast({
+                  title: "会话已重置",
+                  description: "之前的会话已过期，已为您开始新对话",
+                  variant: "default",
+                });
+              }
+              
+              // 提取会话ID和消息ID
+              if (data.conversation_id) {
+                // 如果是新消息或与当前消息ID匹配，则更新最后接收的会话ID
+                if (!currentMessageId || (data.message_id && data.message_id === currentMessageId)) {
+                  lastReceivedConversationId = data.conversation_id;
+                  currentMessageId = data.message_id || currentMessageId;
+                  
+                  // 更新最后消息ID
+                  if (data.message_id) {
+                    setLastMessageId(data.message_id);
+                  }
+                }
+              }
+            } catch (e) {
+              // 解析错误不影响主流程
+            }
+          }
+
           setMessages(prev => prev.map(msg =>
             msg.id === thinkingMessageId
               ? { ...msg, content, isStreaming: true }
@@ -196,6 +275,16 @@ export function FormChatAppDetail({ appConfig, className }: FormChatAppDetailPro
         },
         // 流式结束处理
         () => {
+          // 流式响应结束时，更新会话ID
+          if (lastReceivedConversationId) {
+            setConversationId(lastReceivedConversationId);
+            
+            // 如果有最后消息ID，获取建议问题 - 仅在流式响应模式时调用
+            if (currentMessageId) {
+              fetchSuggestedQuestionsAfterAnswer(currentMessageId);
+            }
+          }
+          
           setMessages(prev => prev.map(msg =>
             msg.id === thinkingMessageId
               ? { ...msg, isStreaming: false }
@@ -204,18 +293,34 @@ export function FormChatAppDetail({ appConfig, className }: FormChatAppDetailPro
         }
       )
 
-      if (response && thinkingMessageId) {
+      if (response) {
         // 如果是阻塞式响应，更新消息内容
         setMessages(prev => prev.map(msg =>
           msg.id === thinkingMessageId
             ? { ...msg, content: response.content, isStreaming: false }
             : msg
         ))
+
+        // 处理阻塞式响应的会话ID (仅当AppType为CHAT时)
+        if (appConfig.type === AppType.CHAT && response.conversationId) {
+          setConversationId(response.conversationId);
+        }
+
         setIsLoading(false)
       }
     } catch (error) {
-      console.error("发送消息失败:", error)
       const errorMessage = error instanceof Error ? error.message : "处理消息时出错"
+      
+      // 检查是否是会话过期错误
+      if (errorMessage.includes("SESSION_EXPIRED")) {
+        setConversationId('');
+        toast({
+          title: "会话已重置",
+          description: "之前的会话已过期，已为您开始新对话",
+          variant: "default",
+        });
+      }
+      
       // 移除正在思考的消息
       setMessages(prev => prev.filter(msg => msg.id !== thinkingMessageId))
        const errorChatMessage: ChatMessage = {
@@ -242,10 +347,18 @@ export function FormChatAppDetail({ appConfig, className }: FormChatAppDetailPro
     console.log("表单提交触发")
     setIsFormSubmitting(true)
     setIsLoading(true)
+    // 清空之前的建议问题
+    setSuggestedQuestions([])
+    // 重置获取建议问题的标志
+    setIsFetchingSuggestions(false)
 
     const userContentParts: string[] = ["提交表单:"]
     const processedFormInputs: Record<string, any> = {}
     let thinkingMessageId: string | undefined
+
+    // 流式响应中最后一个有效的会话ID和消息ID
+    let lastReceivedConversationId: string | null = null;
+    let currentMessageId: string | null = null;
 
     try {
       for (const fieldId in formData) {
@@ -327,11 +440,22 @@ export function FormChatAppDetail({ appConfig, className }: FormChatAppDetailPro
       }
       setMessages(prev => [...prev, thinkingMessage])
 
+      // 判断是否使用会话ID (仅当AppType为CHAT时使用)
+      const shouldUseConversationId = appConfig.type === AppType.CHAT && conversationId !== '';
+      
+      console.log(
+        shouldUseConversationId 
+          ? `继续对话，使用会话ID: ${conversationId}` 
+          : '开始新对话，会话ID将由系统生成'
+      );
+
       // 准备API请求参数
       const apiParams: ApiRequestParams = {
         query: formContent.length > 0 ? formContent : " ", // 确保至少有一个空格，避免空字符串
         inputs: processedFormInputs,
         user: "test_user",
+        // 仅当AppType为CHAT时传递会话ID
+        conversation_id: shouldUseConversationId ? conversationId : '',
         response_mode: appConfig.chatModel === "sse" ? "streaming" : "blocking"
       }
 
@@ -344,7 +468,42 @@ export function FormChatAppDetail({ appConfig, className }: FormChatAppDetailPro
           chatModel: appConfig.chatModel || "block",
         },
         // 流式数据处理
-        (content) => {
+        (content, rawData) => {
+          // 处理流式响应中的会话ID (仅当AppType为CHAT时)
+          if (appConfig.type === AppType.CHAT && rawData) {
+            try {
+              const data = JSON.parse(rawData);
+              
+              // 检查是否有会话过期错误
+              if (data.error && data.error_code === "SESSION_EXPIRED") {
+                console.warn("会话已过期，将重置会话ID");
+                setConversationId('');
+                toast({
+                  title: "会话已重置",
+                  description: "之前的会话已过期，已为您开始新对话",
+                  variant: "default",
+                });
+              }
+              
+              // 提取会话ID和消息ID
+              if (data.conversation_id) {
+                // 如果是新消息或与当前消息ID匹配，则更新最后接收的会话ID
+                if (!currentMessageId || (data.message_id && data.message_id === currentMessageId)) {
+                  lastReceivedConversationId = data.conversation_id;
+                  currentMessageId = data.message_id || currentMessageId;
+                  
+                  // 更新最后消息ID
+                  if (data.message_id) {
+                    setLastMessageId(data.message_id);
+                  }
+                }
+              }
+            } catch (e) {
+              // 解析错误不影响主流程
+              console.error("解析流式数据中的会话ID失败:", e);
+            }
+          }
+
             setMessages(prev => prev.map(msg =>
               msg.id === thinkingMessageId
                 ? { ...msg, content, isStreaming: true }
@@ -354,11 +513,23 @@ export function FormChatAppDetail({ appConfig, className }: FormChatAppDetailPro
         },
         // 流式结束处理
         () => {
-            setMessages(prev => prev.map(msg =>
-              msg.id === thinkingMessageId
-                ? { ...msg, isStreaming: false }
-                : msg
-            ))
+          // 流式响应结束时，更新会话ID
+          if (lastReceivedConversationId) {
+            console.log(`流式响应结束，保存会话ID: ${lastReceivedConversationId}`);
+            setConversationId(lastReceivedConversationId);
+            
+            // 如果有最后消息ID，获取建议问题
+            if (currentMessageId) {
+              console.log(`流式响应结束后获取消息ID: ${currentMessageId} 的建议问题`);
+              fetchSuggestedQuestionsAfterAnswer(currentMessageId);
+            }
+          }
+          
+          setMessages(prev => prev.map(msg =>
+            msg.id === thinkingMessageId
+              ? { ...msg, isStreaming: false }
+              : msg
+          ))
         }
       )
 
@@ -369,6 +540,12 @@ export function FormChatAppDetail({ appConfig, className }: FormChatAppDetailPro
             ? { ...msg, content: response.content, isStreaming: false }
             : msg
         ))
+
+        // 处理阻塞式响应的会话ID (仅当AppType为CHAT时)
+        if (appConfig.type === AppType.CHAT && response.conversationId) {
+          console.log(`阻塞式响应，保存会话ID: ${response.conversationId}`);
+          setConversationId(response.conversationId);
+        }
       }
 
       // 保存已提交的表单输入，用于后续聊天参考
@@ -386,6 +563,17 @@ export function FormChatAppDetail({ appConfig, className }: FormChatAppDetailPro
     } catch (error) {
       console.error("表单提交错误:", error)
       const errorMessage = error instanceof Error ? error.message : "处理表单时出错"
+      
+      // 检查是否是会话过期错误
+      if (errorMessage.includes("SESSION_EXPIRED")) {
+        console.warn("会话已过期，将重置会话ID");
+        setConversationId('');
+        toast({
+          title: "会话已重置",
+          description: "之前的会话已过期，已为您开始新对话",
+          variant: "default",
+        });
+      }
       
       if (thinkingMessageId) {
         // 更新思考消息为错误消息
@@ -431,12 +619,22 @@ export function FormChatAppDetail({ appConfig, className }: FormChatAppDetailPro
     // 清除聊天文件上传
     setChatUploadedFiles([]);
     
-    // 通知用户表单已重置
-    toast({
-      title: "表单已重置",
-      description: "所有字段已重置为默认值",
-      duration: 2000,
-    });
+    // 清除会话ID，开始新对话
+    if (conversationId) {
+      setConversationId('');
+      toast({
+        title: "会话已重置",
+        description: "表单重置，将开始新对话",
+        duration: 2000,
+      });
+    } else {
+      // 通知用户表单已重置
+      toast({
+        title: "表单已重置",
+        description: "所有字段已重置为默认值",
+        duration: 2000,
+      });
+    }
   }
 
   // 处理复制消息
@@ -490,7 +688,6 @@ export function FormChatAppDetail({ appConfig, className }: FormChatAppDetailPro
       try {
         return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(appConfig.logo)}`
       } catch (e) {
-        console.error('Logo编码错误:', e);
         // 编码失败时使用默认图标
         return '/icons/app-default.svg';
       }
@@ -617,7 +814,6 @@ export function FormChatAppDetail({ appConfig, className }: FormChatAppDetailPro
            newInputs[fieldId] = inputData;
          }
          
-         console.log(`FormChatAppDetail: Auto-updating submittedInputs for field '${fieldId}'`, newInputs);
          return newInputs;
       });
 
@@ -632,16 +828,12 @@ export function FormChatAppDetail({ appConfig, className }: FormChatAppDetailPro
           
           // 添加到文件列表中
           const updatedFiles = [...prevFiles, newFileEntry];
-          console.log(`FormChatAppDetail: Auto-updating submittedFiles`, updatedFiles);
           return updatedFiles;
       });
 
       toast({ title: "成功", description: `${file.name} 上传成功 (表单)。` });
       
-      // 添加日志，确认返回的数据结构
-      console.log(`返回给DynamicForm的文件信息:`, { ...uploadedFileInfo, id: tempId });
-      
-      // Return the info needed by DynamicForm to update *its* internal state
+      // 返回给DynamicForm的文件信息
       return { ...uploadedFileInfo, id: tempId }; // Return with the original tempId
 
     } catch (error) {
@@ -654,9 +846,7 @@ export function FormChatAppDetail({ appConfig, className }: FormChatAppDetailPro
   };
 
   // <<< NEW: Handler for form file removal - Updates context automatically >>>
-  const handleRemoveFileForForm = (fieldId: string, fileIdToRemove: string) => { // fileId here is likely the tempId or uploadFileId
-      console.log(`FormChatAppDetail: Removing file from form: fieldId=${fieldId}, fileId=${fileIdToRemove}`);
-
+  const handleRemoveFileForForm = (fieldId: string, fileIdToRemove: string) => {
       let uploadFileIdToRemove: string | undefined = undefined;
       
       // 获取字段配置，检查是否为file-list类型
@@ -693,7 +883,6 @@ export function FormChatAppDetail({ appConfig, className }: FormChatAppDetailPro
                 uploadFileIdToRemove = fieldInputData.upload_file_id; // Store the ID for filtering files array
                 const newInputs = { ...prevInputs };
                 delete newInputs[fieldId]; // Remove the input entry for this field
-                console.log(`FormChatAppDetail: Auto-removing input for field '${fieldId}'`);
                 return newInputs;
             }
           }
@@ -705,13 +894,9 @@ export function FormChatAppDetail({ appConfig, className }: FormChatAppDetailPro
       if (fileIdToRemove) {
          setSubmittedFiles(prevFiles => {
              const updatedFiles = prevFiles.filter(f => f.upload_file_id !== fileIdToRemove);
-             if (updatedFiles.length !== prevFiles.length) {
-                 console.log(`FormChatAppDetail: Auto-removing file entry with upload_file_id '${fileIdToRemove}'`);
-             }
              return updatedFiles;
          });
       }
-
 
       // Add logic here if you need to call a backend API to delete the uploaded file from the server.
   };
@@ -797,7 +982,6 @@ export function FormChatAppDetail({ appConfig, className }: FormChatAppDetailPro
           return prev.filter(file => file.id !== fileIdToRemove);
       });
       // 这里可以添加调用后端删除文件的逻辑（如果需要）
-      console.log(`Removed chat file: ${fileIdToRemove}`);
   }
 
   // 处理开场问题点击
@@ -827,6 +1011,9 @@ export function FormChatAppDetail({ appConfig, className }: FormChatAppDetailPro
       handleSendMessage(question);
     }
   };
+
+  // 只在开发环境下显示调试信息
+  const isDevMode = process.env.NODE_ENV === 'development';
 
   return (
     <div className={`flex flex-col h-full bg-white dark:bg-[#0f172a] ${className} flex-grow min-h-0`}>
@@ -864,7 +1051,6 @@ export function FormChatAppDetail({ appConfig, className }: FormChatAppDetailPro
                   alt={appConfig.name} 
                   className="w-10 h-10 object-contain"
                   onError={(e) => {
-                    console.error('应用图标加载失败:', e);
                     e.currentTarget.src = "/icons/app-default.svg";
                   }}
                 />
@@ -901,6 +1087,19 @@ export function FormChatAppDetail({ appConfig, className }: FormChatAppDetailPro
                     isStreaming={message.isStreaming}
                   />
                 ))}
+                {/* 显示回答后的建议问题 */}
+                {suggestedQuestions.length > 0 && !isLoading && messages.length > 0 && (
+                  <div className="mt-2 mb-4 border-t border-gray-100 dark:border-gray-800 relative">
+                    <div className="absolute top-0 left-1/2 transform -translate-y-1/2 -translate-x-1/2 bg-white dark:bg-[#0f172a] px-3 py-0.5 text-xs text-gray-500 dark:text-gray-400 z-10 rounded-full border border-gray-100 dark:border-gray-700">
+                      试着问问
+                    </div>
+                    <SuggestedQuestions
+                      questions={suggestedQuestions}
+                      onQuestionClick={handleQuickQuestionClick}
+                      className="mt-3" // 增加顶部间距，为标签留出空间
+                    />
+                  </div>
+                )}
                 <div ref={messagesEndRef} />
               </div>
             </div>

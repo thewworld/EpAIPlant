@@ -210,7 +210,7 @@ export default function ChatAppPage() {
       appDescription={appConfig.description}
       appIcon={appIcon}
     >
-      {appConfig.formConfig ? (
+      {appConfig.formConfig && appConfig.formConfig.fields && appConfig.formConfig.fields.length > 0 ? (
         <FormChatAppDetail appConfig={appConfig} className="h-full" />
       ) : (
         <ChatAppDetail appConfig={appConfig} className="h-full" />

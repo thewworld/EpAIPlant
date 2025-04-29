@@ -26,6 +26,7 @@ export interface DifyApiResponse {
   content: string
   messageId?: string
   error?: string
+  conversationId?: string
 }
 
 // 将内部文件对象转换为正确格式
@@ -54,7 +55,7 @@ function transformFileObject(fileObject: any): any {
 export async function callDifyApi(
   params: DifyApiParams,
   config: DifyApiConfig,
-  onStreamData?: (content: string) => void,
+  onStreamData?: (content: string, rawData?: string) => void,
   onStreamEnd?: () => void
 ): Promise<DifyApiResponse> {
   // 根据应用类型选择API端点
@@ -144,7 +145,7 @@ async function handleSseResponse(
   apiEndpoint: string,
   requestBody: any,
   appType: AppType,
-  onStreamData?: (content: string) => void,
+  onStreamData?: (content: string, rawData?: string) => void,
   onStreamEnd?: () => void
 ): Promise<DifyApiResponse> {
   let response: Response
@@ -173,8 +174,13 @@ async function handleSseResponse(
   let accumulatedContent = ""
   let hasTextChunk = false
   let hasContent = false
+  let lastConversationId: string | undefined = undefined
+  let lastMessageId: string | undefined = undefined
+  
   const decoder = new TextDecoder()
   let buffer = ""
+  // 添加标记，确保onStreamEnd只被调用一次
+  let streamEndCalled = false
 
   try {
     while (true) {
@@ -211,18 +217,35 @@ async function handleSseResponse(
                   onStreamData?.(accumulatedContent)
                 }
               }
-              onStreamEnd?.()
+              // 确保只调用一次
+              if (onStreamEnd && !streamEndCalled) {
+                streamEndCalled = true
+                onStreamEnd()
+              }
               break
             }
           } else {
+            // 保存最后一次收到的会话ID和消息ID（聊天应用专用）
+            if (appType === AppType.CHAT && data.conversation_id) {
+              lastConversationId = data.conversation_id
+              if (data.message_id) {
+                lastMessageId = data.message_id
+              }
+            }
+            
             if ((data.event === "message" || data.event === "agent_message") && data.answer) {
               hasContent = true
               accumulatedContent += data.answer
-              onStreamData?.(accumulatedContent)
+              // 传递原始数据给回调函数，以便提取会话ID
+              onStreamData?.(accumulatedContent, jsonStr)
             }
 
             if (data.event === "message_end") {
-              onStreamEnd?.()
+              // 确保只调用一次
+              if (onStreamEnd && !streamEndCalled) {
+                streamEndCalled = true
+                onStreamEnd()
+              }
             }
           }
         } catch (e) {
@@ -238,11 +261,19 @@ async function handleSseResponse(
       onStreamData(`抱歉，处理响应时出错: ${errorMessage}`)
     }
     reader.releaseLock()
-    onStreamEnd?.()
-    return { content: `抱歉，处理响应时出错: ${errorMessage}`, error: errorMessage }
+    // 确保只调用一次
+    if (onStreamEnd && !streamEndCalled) {
+      streamEndCalled = true
+      onStreamEnd()
+    }
+    return { 
+      content: `抱歉，处理响应时出错: ${errorMessage}`, 
+      error: errorMessage,
+      conversationId: lastConversationId // 即使出错，也返回最后已知的会话ID
+    }
   } finally {
     reader.releaseLock()
-    onStreamEnd?.()
+    // 移除这里的onStreamEnd调用，避免重复调用
   }
 
   // 如果没有获取到任何内容，返回友好提示
@@ -251,10 +282,22 @@ async function handleSseResponse(
     if (onStreamData) {
       onStreamData(friendlyMessage)
     }
-    return { content: friendlyMessage }
+    // 确保在异常流程中也只调用一次onStreamEnd
+    if (onStreamEnd && !streamEndCalled) {
+      streamEndCalled = true
+      onStreamEnd()
+    }
+    return { 
+      content: friendlyMessage,
+      conversationId: lastConversationId // 返回最后记录的会话ID
+    }
   }
 
-  return { content: accumulatedContent }
+  return { 
+    content: accumulatedContent,
+    messageId: lastMessageId,
+    conversationId: lastConversationId // 返回最后记录的会话ID
+  }
 }
 
 async function handleBlockingResponse(
@@ -285,7 +328,7 @@ async function handleBlockingResponse(
   } catch (error) {
     throw new Error("无法解析服务器响应，响应格式不正确")
   }
-  
+ 
   if (appType === AppType.WORKFLOW) {
     if (data.error) {
       throw new Error(`工作流执行失败: ${data.error}`)
@@ -317,11 +360,15 @@ async function handleBlockingResponse(
       messageId: data.message_id || data.id,
     }
   } else {
+    // 提取并返回会话ID（针对聊天应用）
+    const conversationId = data.conversation_id;
+      
     const content = data.answer || data.text || ""
     if (content.trim()) {
       return {
         content,
         messageId: data.message_id,
+        conversationId: conversationId  // 添加会话ID到响应中
       }
     }
     
@@ -329,6 +376,44 @@ async function handleBlockingResponse(
     return {
       content: "处理完成，但未返回任何内容。您可以尝试重新提问或使用不同的方式表述您的问题。",
       messageId: data.message_id,
+      conversationId: conversationId  // 添加会话ID到响应中
     }
+  }
+}
+
+/**
+ * 获取对话建议问题
+ * 
+ * @param appId 应用ID
+ * @param messageId 消息ID
+ * @param user 用户标识
+ * @returns 建议问题列表
+ */
+export async function fetchSuggestedQuestions(
+  appId: string,
+  messageId: string,
+  user: string
+): Promise<string[]> {
+  try {
+    const url = `${API_BASE_URL}/api/dify/messages/${messageId}/suggested?appId=${appId}&user=${user}`;
+    
+    console.log(`获取建议问题: ${url}`);
+    
+    const response = await fetch(url, {
+      method: "GET",
+      headers: { "Content-Type": "application/json" }
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => "无法获取错误详情");
+      throw new Error(`获取建议问题失败: ${response.status} ${errorText}`);
+    }
+
+    const questions = await response.json();
+    console.log(`收到建议问题: ${questions.length}个`);
+    return questions;
+  } catch (error) {
+    console.error("获取建议问题出错:", error);
+    return [];
   }
 } 

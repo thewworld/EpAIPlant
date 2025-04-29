@@ -171,6 +171,11 @@ public class DifyAppController {
                     difyApp.setSuggestedQuestions(questions);
                 }
                 
+                // 设置回答后推荐问题功能状态
+                if (parameters.getSuggestedQuestionsAfterAnswer() != null) {
+                    difyApp.setSuggestAfterAnswer(parameters.getSuggestedQuestionsAfterAnswer().isEnabled());
+                }
+                
                 // 存储表单配置为JSON字符串
                 if (parameters.getUserInputForm() != null) {
                     difyApp.setFormConfig(convertFormConfigToJson(parameters.getUserInputForm()));

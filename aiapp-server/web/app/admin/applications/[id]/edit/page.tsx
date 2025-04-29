@@ -22,6 +22,7 @@ interface AppFormData {
   chatModel: string;
   openerContent: string;
   suggestedQuestions: string[]; // 开场问题列表
+  suggestAfterAnswer: boolean; // 是否启用回答后推荐问题
   newSuggestedQuestion: string; // 编辑中的开场问题
   maxTokens: number;
   temperature: number;
