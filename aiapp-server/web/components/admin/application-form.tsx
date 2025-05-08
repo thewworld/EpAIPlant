@@ -821,74 +821,15 @@ export function ApplicationForm({ mode, id, initialData, isLoading = false, isUs
       })
     } else {
       try {
-        // 尝试解析JSON
-        const parsedValue = JSON.parse(value)
+        // 尝试解析JSON，只验证JSON格式是否正确
+        JSON.parse(value)
         
-        // 验证JSON结构，检查是否符合表单格式要求
-        let isValidFormConfig = false
-        
-        // 检查是否为数组格式的表单配置
-        if (Array.isArray(parsedValue)) {
-          // 检查数组中的每一项是否包含必要的表单字段属性
-          isValidFormConfig = parsedValue.length === 0 || parsedValue.some(item => 
-            item && typeof item === 'object' && (
-              item.type || 
-              item.name || 
-              item.label
-            )
-          )
-        } 
-        // 检查是否为Dify格式的表单配置
-        else if (
-          parsedValue && 
-          typeof parsedValue === 'object' && 
-          Array.isArray(parsedValue.userInputForm)
-        ) {
-          isValidFormConfig = true
-        }
-        // 检查是否包含formConfig属性的嵌套结构
-        else if (
-          parsedValue && 
-          typeof parsedValue === 'object' && 
-          parsedValue.formConfig
-        ) {
-          try {
-            const nestedConfig = typeof parsedValue.formConfig === 'string'
-              ? JSON.parse(parsedValue.formConfig)
-              : parsedValue.formConfig
-              
-            if (Array.isArray(nestedConfig) || 
-                (nestedConfig && nestedConfig.userInputForm)) {
-              isValidFormConfig = true
-            }
-          } catch (nestedErr) {
-            console.warn("嵌套formConfig解析失败", nestedErr)
-          }
-        }
-        // 检查对象是否直接包含表单字段属性
-        else if (
-          parsedValue && 
-          typeof parsedValue === 'object' &&
-          (parsedValue.type || parsedValue.name || parsedValue.label)
-        ) {
-          isValidFormConfig = true
-        }
-        
-        // 验证JSON格式和结构
-        if (isValidFormConfig) {
-        // 验证通过，清除formConfig的错误
+        // JSON格式验证通过，清除formConfig的错误
         setErrors((prev) => {
           const newErrors = { ...prev }
           delete newErrors.formConfig
           return newErrors
         })
-        } else {
-          // JSON格式正确但结构不符合表单要求
-          setErrors((prev) => ({ 
-            ...prev, 
-            formConfig: "JSON格式正确，但不符合表单配置的结构要求" 
-          }))
-        }
       } catch (error) {
         // JSON格式无效
         setErrors((prev) => ({ 

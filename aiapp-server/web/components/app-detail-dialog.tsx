@@ -403,7 +403,7 @@ export function AppDetailDialog({ app, isOpen, onClose, onAppClick, relatedApps 
                             className="w-5 h-5 rounded-full mr-1"
                             alt="Developer"
                           />
-                          <span className="text-sm font-medium text-gray-600 dark:text-gray-300">EAI平台</span>
+                          <span className="text-sm font-medium text-gray-600 dark:text-gray-300">易智能AI平台</span>
                         </div>
                         <div className="flex items-center ml-4">
                           <div className="flex">

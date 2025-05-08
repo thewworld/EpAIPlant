@@ -120,7 +120,7 @@ export default function ChatPage() {
     }
 
     if (lowerInput.includes("名字")) {
-      return "我的名字是小易，是EAI平台的智能助手。"
+      return "我的名字是小易，是易智能AI平台的智能助手。"
     }
 
     if (lowerInput.includes("天气")) {

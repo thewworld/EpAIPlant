@@ -77,17 +77,81 @@ export function Message({
       }
     }
 
-    navigator.clipboard.writeText(textToCopy).then(() => {
-      setCopied(true);
-      if (onCopy) onCopy(textToCopy);
+    // 尝试使用现代Clipboard API
+    const copyToClipboard = () => {
+      // 检查navigator.clipboard是否可用
+      if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+        return navigator.clipboard.writeText(textToCopy)
+          .then(() => {
+            return true;
+          })
+          .catch(error => {
+            console.error('Clipboard API 失败:', error);
+            return false;
+          });
+      }
+      return Promise.resolve(false);
+    };
 
-      // 2秒后重置复制状态
-      setTimeout(() => {
-        setCopied(false);
-      }, 2000);
-    }).catch(error => {
-      console.error('复制失败:', error);
-    });
+    // 回退方法：使用document.execCommand
+    const fallbackCopyToClipboard = () => {
+      try {
+        // 创建临时textarea元素
+        const textArea = document.createElement("textarea");
+        textArea.value = textToCopy;
+        
+        // 将textarea设为不可见但保留在DOM中
+        textArea.style.position = 'fixed';
+        textArea.style.top = '0';
+        textArea.style.left = '0';
+        textArea.style.width = '2em';
+        textArea.style.height = '2em';
+        textArea.style.padding = '0';
+        textArea.style.border = 'none';
+        textArea.style.outline = 'none';
+        textArea.style.boxShadow = 'none';
+        textArea.style.background = 'transparent';
+        
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        
+        // 执行复制命令
+        const successful = document.execCommand('copy');
+        
+        // 移除临时元素
+        document.body.removeChild(textArea);
+        
+        return successful;
+      } catch (err) {
+        console.error('Fallback 复制方法失败:', err);
+        return false;
+      }
+    };
+
+    // 首先尝试使用Clipboard API，如果失败则回退到execCommand方法
+    copyToClipboard()
+      .then(success => {
+        if (!success) {
+          // 如果现代API失败，尝试fallback方法
+          const fallbackSuccess = fallbackCopyToClipboard();
+          if (!fallbackSuccess) {
+            console.error('所有复制方法都失败了');
+            // 可以在这里添加用户提示
+          } else {
+            setCopied(true);
+            if (onCopy) onCopy(textToCopy);
+          }
+        } else {
+          setCopied(true);
+          if (onCopy) onCopy(textToCopy);
+        }
+        
+        // 无论哪种方法，都设置复制状态并在2秒后重置
+        setTimeout(() => {
+          setCopied(false);
+        }, 2000);
+      });
   }
 
   // 处理点赞

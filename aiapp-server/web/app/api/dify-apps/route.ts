@@ -1,8 +1,6 @@
 import { NextResponse } from 'next/server';
-import { API_BASE_URL } from '@/lib/config'; // 从配置文件导入 API_BASE_URL
+import { API_BASE_URL } from '@/lib/constants'; // 从constants文件导入 API_BASE_URL
 
-// 移除环境变量相关代码
-// const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
 
 export async function GET() {
   // 不需要检查 API_BASE_URL 是否存在

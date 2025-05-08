@@ -54,7 +54,7 @@ export function MobileNav({ className }: MobileNavProps) {
         </Button>
 
         <div className="mx-auto">
-          <h1 className="text-lg font-semibold">EAI 平台</h1>
+          <h1 className="text-lg font-semibold">易智能AI平台</h1>
         </div>
 
         <Link href="/profile">

@@ -48,7 +48,7 @@ export function PlatformPreview() {
           <div className="w-3 h-3 rounded-full bg-green-500"></div>
         </div>
         <div className="flex-1 text-center text-sm font-medium text-gray-600 dark:text-gray-300">
-          EAI 平台 - 智能研究助手
+          易智能AI平台 - 智能研究助手
         </div>
         <div className="w-16"></div>
       </div>
@@ -134,7 +134,7 @@ function ChatInterface({ animationFrame }: { animationFrame: number }) {
           </div>
           <div className="bg-gray-100 dark:bg-[#1e293b] rounded-lg p-3 max-w-[80%] border border-gray-200 dark:border-[#334155]">
             <p className="text-sm text-gray-700 dark:text-gray-300">
-              欢迎使用EAI平台的AI助手，我可以帮助您回答问题、提供研究建议或协助写作。请问有什么我可以帮您的？
+              欢迎使用易智能AI平台的AI助手，我可以帮助您回答问题、提供研究建议或协助写作。请问有什么我可以帮您的？
             </p>
           </div>
         </div>

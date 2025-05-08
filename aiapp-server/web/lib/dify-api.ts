@@ -328,7 +328,7 @@ async function handleBlockingResponse(
   } catch (error) {
     throw new Error("无法解析服务器响应，响应格式不正确")
   }
- 
+  
   if (appType === AppType.WORKFLOW) {
     if (data.error) {
       throw new Error(`工作流执行失败: ${data.error}`)

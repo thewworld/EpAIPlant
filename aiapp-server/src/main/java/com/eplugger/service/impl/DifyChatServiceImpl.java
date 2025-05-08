@@ -313,6 +313,9 @@ public class DifyChatServiceImpl implements DifyChatService {
 
     @Override
     public List<String> getSuggestedQuestions(String messageId, String user, String apiKey) {
+        // 注意：该方法依赖控制器层对suggestAfterAnswer字段的检查
+        // 只有当应用开启了回答后建议问题功能(suggestAfterAnswer=true)时才会被调用
+        // 控制器层已对此进行了过滤，此处只负责调用API获取数据
         try {
             String url = UriComponentsBuilder.fromHttpUrl(configBaseUrl + "/messages/" + messageId + "/suggested")
                     .queryParam("user", user)

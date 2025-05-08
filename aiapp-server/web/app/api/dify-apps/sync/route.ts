@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { API_BASE_URL } from '@/lib/config'; // 从配置文件导入 API_BASE_URL
+import { API_BASE_URL } from '@/lib/constants'; // 从constants文件导入 API_BASE_URL
 
 // 移除环境变量和硬编码值
 // const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:8087';

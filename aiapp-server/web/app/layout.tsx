@@ -9,9 +9,8 @@ import { QuantumAIAssistant } from "@/components/quantum-ai-assistant"
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "EAI Platform",
-  description: "Enterprise AI Platform for Research and Education",
-    generator: 'v0.dev'
+  title: "易智能AI平台",
+  description: "AI智能应用平台"
 }
 
 export default function RootLayout({
@@ -20,7 +19,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="zh-CN" suppressHydrationWarning>
       <head />
       <body className={inter.className}>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>

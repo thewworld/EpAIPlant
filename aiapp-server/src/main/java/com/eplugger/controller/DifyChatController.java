@@ -2,9 +2,10 @@ package com.eplugger.controller;
 
 import cn.hutool.core.exceptions.ExceptionUtil;
 import cn.hutool.json.JSONObject;
+import com.eplugger.model.DifyApp;
 import com.eplugger.model.DifyRequest;
-import com.eplugger.service.DifyChatService;
 import com.eplugger.service.DifyAppService;
+import com.eplugger.service.DifyChatService;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.log4j.Log4j2;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -16,6 +17,7 @@ import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executors;
@@ -226,8 +228,15 @@ public class DifyChatController {
             @RequestParam Long appId,
             @PathVariable String messageId,
             @RequestParam String user) {
-        String apiKey = difyAppService.getApiKeyById(appId);
-        List<String> response = difyService.getSuggestedQuestions(messageId, user, apiKey);
+        // 获取应用详情，检查是否启用了回答后建议问题功能
+        DifyApp difyApp = difyAppService.getById(appId);
+        
+        // 如果没有启用回答后建议问题功能，直接返回空列表
+        if (difyApp == null || difyApp.getSuggestAfterAnswer() == null || !difyApp.getSuggestAfterAnswer()) {
+            return ResponseEntity.ok(new ArrayList<>());
+        }
+        // 如果启用了回答后建议问题功能，则调用服务获取建议问题
+        List<String> response = difyService.getSuggestedQuestions(messageId, user, difyApp.getApiKey());
         return ResponseEntity.ok(response);
     }
 

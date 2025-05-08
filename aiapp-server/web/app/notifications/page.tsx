@@ -15,7 +15,7 @@ const notifications = [
   {
     id: 1,
     title: "系统更新",
-    content: "EAI平台已更新到最新版本，新增多项功能和优化。",
+    content: "易智能AI平台已更新到最新版本，新增多项功能和优化。",
     time: "2023-12-20 09:30",
     type: "info",
     read: false,

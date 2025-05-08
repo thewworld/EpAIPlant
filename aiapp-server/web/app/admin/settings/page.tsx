@@ -53,7 +53,7 @@ export default function SettingsPage() {
             <CardContent className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="platformName">平台名称</Label>
-                <Input id="platformName" defaultValue="易智能运维平台" />
+                <Input id="platformName" defaultValue="易智能AI平台" />
               </div>
               
               <div className="space-y-2">

@@ -88,7 +88,7 @@ export function Sidebar({ recentApps, onAppClick, className, favoriteApps = [] }
           <div className="h-8 w-8 rounded-md bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
             <Cpu className="h-4 w-4 text-white" />
           </div>
-          <h2 className="font-semibold text-xl text-gray-800 dark:text-white">EAI 平台</h2>
+          <h2 className="font-semibold text-xl text-gray-800 dark:text-white">易智能AI平台</h2>
         </div>
         <ThemeToggle />
       </div>

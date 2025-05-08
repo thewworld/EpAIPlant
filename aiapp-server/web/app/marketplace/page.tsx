@@ -14,7 +14,7 @@ import { UserProfile } from "@/components/user-profile"
 import { AppDetailDialog } from "@/components/app-detail-dialog"
 import { AppConfig, AppType } from "@/types/app-config"
 import { AppCard } from '@/components/app-card'
-import { API_BASE_URL } from '@/lib/config'; // 从配置文件导入 API_BASE_URL
+import { API_BASE_URL } from '@/lib/constants'; // 从constants导入 API_BASE_URL
 
 export default function MarketplacePage() {
   const router = useRouter()

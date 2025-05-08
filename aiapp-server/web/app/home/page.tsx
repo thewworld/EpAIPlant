@@ -47,7 +47,7 @@ export default function HomePage() {
               <div className="h-8 w-8 rounded-md bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
                 <Cpu className="h-5 w-5 text-white" />
               </div>
-              <h2 className="font-semibold text-xl text-gray-800 dark:text-white">EAI 平台</h2>
+              <h2 className="font-semibold text-xl text-gray-800 dark:text-white">易智能AI平台</h2>
             </div>
 
             <nav className="hidden md:flex space-x-8">
@@ -147,7 +147,7 @@ export default function HomePage() {
               智能研究与创作的未来平台
             </h1>
             <p className="text-xl md:text-2xl text-gray-600 dark:text-gray-300 mb-8 leading-relaxed">
-              EAI平台集成先进AI技术，为科研、教育和管理提供智能解决方案，
+              易智能AI平台集成先进AI技术，为科研、教育和管理提供智能解决方案，
               <br className="hidden md:block" />
               助您高效完成研究、写作与知识管理。
             </p>
@@ -202,7 +202,7 @@ export default function HomePage() {
           <div className="max-w-3xl mx-auto text-center mb-16">
             <h2 className="text-3xl font-bold mb-4 text-gray-800 dark:text-white">强大功能，助力创新</h2>
             <p className="text-xl text-gray-600 dark:text-gray-300">
-              EAI平台提供多样化的AI工具，满足您在科研、教学和管理中的各种需求
+              易智能AI平台提供多样化的AI工具，满足您在科研、教学和管理中的各种需求
             </p>
           </div>
 
@@ -311,7 +311,7 @@ export default function HomePage() {
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
           <div className="max-w-3xl mx-auto text-center mb-16">
             <h2 className="text-3xl font-bold mb-4">值得信赖的AI平台</h2>
-            <p className="text-xl opacity-90">数以万计的用户选择EAI平台，助力他们的研究和创作</p>
+            <p className="text-xl opacity-90">数以万计的用户选择易智能AI平台，助力他们的研究和创作</p>
           </div>
 
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-8">
@@ -335,7 +335,7 @@ export default function HomePage() {
             <h2 className="text-3xl font-bold mb-4 text-gray-800 dark:text-white">
               准备好提升您的研究与创作效率了吗？
             </h2>
-            <p className="text-xl text-gray-600 dark:text-gray-300 mb-8">立即加入EAI平台，体验AI赋能的智能工作方式</p>
+            <p className="text-xl text-gray-600 dark:text-gray-300 mb-8">立即加入易智能AI平台，体验AI赋能的智能工作方式</p>
             <Button
               size="lg"
               onClick={handleGetStarted}
@@ -356,7 +356,7 @@ export default function HomePage() {
                 <div className="h-8 w-8 rounded-md bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
                   <Cpu className="h-5 w-5 text-white" />
                 </div>
-                <h2 className="font-semibold text-xl text-gray-800 dark:text-white">EAI 平台</h2>
+                <h2 className="font-semibold text-xl text-gray-800 dark:text-white">易智能AI平台</h2>
               </div>
               <p className="text-gray-600 dark:text-gray-400 mb-4">
                 智能研究与创作的未来平台，助力学术、教育与管理创新
@@ -479,7 +479,7 @@ export default function HomePage() {
           </div>
 
           <div className="border-t border-gray-200 dark:border-[#1e293b] mt-12 pt-8 flex flex-col md:flex-row justify-between items-center">
-            <p className="text-gray-600 dark:text-gray-400">© 2025 EAI平台. 保留所有权利.</p>
+            <p className="text-gray-600 dark:text-gray-400">© 2025 易智能AI平台. 保留所有权利.</p>
             <div className="flex space-x-6 mt-4 md:mt-0">
               <Link href="#" className="text-gray-600 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400">
                 <svg className="h-6 w-6" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
